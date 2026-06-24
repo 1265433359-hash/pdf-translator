@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (QMainWindow, QToolBar, QFileDialog, QSpinBox, QLi
                                QMessageBox, QDockWidget, QLabel, QSplitter,
                                QProgressDialog, QComboBox, QToolButton, QMenu,
                                QStackedWidget)
-from PySide6.QtGui import QAction, QShortcut, QKeySequence
+from PySide6.QtGui import QAction, QShortcut, QKeySequence, QCursor
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 from pdf_translator import themes
@@ -19,6 +19,7 @@ from pdf_translator.glossary import Glossary
 from pdf_translator.vocabulary import Vocabulary
 from pdf_translator.word_card import WordCard
 from pdf_translator.translation_pane import TranslationPane
+from pdf_translator.floating_result import FloatingResult
 from pdf_translator.home import HomeWidget
 from pdf_translator.text_preprocessor import paragraphs_from_blocks
 from pdf_translator.translate_queue import estimate_tokens
@@ -34,20 +35,17 @@ class MainWindow(QMainWindow):
         self.cache = TranslationCache()
         self.glossary = Glossary()
         self.view = PdfView()
-        self.pane = TranslationPane()
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.splitter.addWidget(self.view)
-        self.splitter.addWidget(self.pane)
-        self.splitter.setStretchFactor(0, 1)
-        self.splitter.setStretchFactor(1, 1)
+        # 划词结果显示在浮窗(不再占用右栏);PDF 占满整个阅读区
+        self.result = FloatingResult(self)
+        self.pane = self.result.pane  # reuse the same multi-source rendering API
         # home page (launcher) + reader, swapped via a stack
         self.home = HomeWidget()
         self.home.open_requested.connect(self._open)
         self.home.open_path_requested.connect(self._open_path)
         self.home.clear_requested.connect(self._clear_recents)
         self.stack = QStackedWidget()
-        self.stack.addWidget(self.home)      # index 0
-        self.stack.addWidget(self.splitter)  # index 1
+        self.stack.addWidget(self.home)   # index 0
+        self.stack.addWidget(self.view)   # index 1 — full-width PDF
         self.setCentralWidget(self.stack)
         tb = QToolBar(); self.addToolBar(tb)
         tb.addAction(QAction("首页", self, triggered=self._go_home))
@@ -490,8 +488,10 @@ class MainWindow(QMainWindow):
         want_llm = self.settings.use_llm
         if not want_youdao and not want_llm:
             self.pane.show_error("未启用任何翻译来源：请在「设置」勾选 大模型 或 有道词典。")
+            self.result.show_near(QCursor.pos())
             return
         self.pane.start_sources(text, youdao=want_youdao, llm=want_llm)
+        self.result.show_near(QCursor.pos())
         if want_youdao:
             if youdao_unconfigured:
                 self.pane.set_youdao("（有道未配置 appKey/appSecret，请在设置填写）")
@@ -519,9 +519,10 @@ class MainWindow(QMainWindow):
             self._translate_phrase(word)
             return
 
-        # Offline dictionary (ECDICT) base info, shown in the right pane.
+        # Offline dictionary (ECDICT) base info, shown in the floating popup.
         self.pane.show_word(entry, on_speak=self._speak,
                             on_add=lambda e: self.vocab.add(e))
+        self.result.show_near(QCursor.pos())
 
         # Enrich collocations/examples via the LLM only if 大模型 is enabled and
         # a key is configured; never pop a dialog from this best-effort path.

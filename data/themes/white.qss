@@ -1,0 +1,7 @@
+QWidget { background: #ffffff; color: #1a1a1a; font-family: "Segoe UI","Microsoft YaHei"; }
+QToolBar { background: #ffffff; border-bottom: 1px solid #ededed; }
+QPushButton { background: #3b82f6; color: white; border: none; padding: 4px 10px; border-radius: 6px; }
+QPushButton:hover { background: #2f6fe0; }
+QLineEdit, QSpinBox, QComboBox { background: #ffffff; color: #1a1a1a; border: 1px solid #d4d4d4; border-radius: 6px; padding: 3px; }
+QFrame { background: #ffffff; border: 1px solid #e0e0e0; border-radius: 9px; }
+QScrollArea { border: none; }

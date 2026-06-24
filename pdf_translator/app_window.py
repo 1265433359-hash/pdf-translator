@@ -3,6 +3,8 @@ from PySide6.QtWidgets import (QMainWindow, QToolBar, QFileDialog, QSpinBox, QLi
                                QProgressDialog, QComboBox)
 from PySide6.QtGui import QAction, QShortcut, QKeySequence
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication
+from pdf_translator import themes
 from pdf_translator.pdf_view import PdfView
 from pdf_translator.pdf_document import PdfDocument
 from pdf_translator.popup import TransPopup
@@ -52,6 +54,16 @@ class MainWindow(QMainWindow):
         self.view_mode.addItems(["视图：双栏", "视图：原位替换"])
         self.view_mode.currentIndexChanged.connect(self._on_view_mode_changed)
         tb.addWidget(self.view_mode)
+
+        # --- Task 9.1: theme switcher ---
+        self.theme_box = QComboBox()
+        self._themes = themes.available_themes()
+        for name in self._themes:
+            self.theme_box.addItem(f"主题：{name}", name)
+        if self.settings.theme in self._themes:
+            self.theme_box.setCurrentIndex(self._themes.index(self.settings.theme))
+        self.theme_box.currentIndexChanged.connect(self._on_theme_changed)
+        tb.addWidget(self.theme_box)
 
         # --- Task 5.5: dictionary, vocabulary & word card ---
         self.dictionary = Dictionary()
@@ -187,6 +199,17 @@ class MainWindow(QMainWindow):
             # restore two-column: re-render the original page in the left view
             self.pane.show()
             self.view.goto(self.view.current_index)
+
+    # --- Task 9.1: theme switching ---
+    def _on_theme_changed(self, index):
+        name = self.theme_box.itemData(index)
+        if not name:
+            return
+        app = QApplication.instance()
+        if app is not None:
+            themes.apply_theme(app, name)
+        self.settings.theme = name
+        self.settings.save()
 
     def _render_inplace_page(self):
         if self.view._doc is None:

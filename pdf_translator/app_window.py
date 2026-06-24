@@ -84,9 +84,9 @@ class MainWindow(QMainWindow):
         self.settings_action = QAction("设置", self, triggered=self._open_settings)
         tb.addAction(self.settings_action)
 
-        # --- Task 10.2: export vocabulary to Anki ---
-        self.export_vocab_action = QAction("导出生词本", self, triggered=self._export_vocab)
-        tb.addAction(self.export_vocab_action)
+        # --- vocabulary book (browse/search/delete/export) ---
+        self.vocab_action = QAction("生词本", self, triggered=self._open_vocab)
+        tb.addAction(self.vocab_action)
 
         # --- Task 9.1: theme switcher ---
         self.theme_box = QComboBox()
@@ -410,6 +410,10 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "保存失败",
                 f"无法写入该 PDF：\n{e}\n\n（文件可能被占用或只读）")
+
+    def _open_vocab(self):
+        from pdf_translator.vocab_dialog import VocabularyDialog
+        VocabularyDialog(self.vocab, on_speak=self._speak, parent=self).exec()
 
     def _save_window_state(self):
         self.settings.win_max = self.isMaximized()

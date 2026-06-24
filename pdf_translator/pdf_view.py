@@ -24,6 +24,7 @@ class PdfView(QScrollArea):
         self._sel_overlay_page = -1
         self._base_pm = None        # cached page pixmap without the live selection
         self._scale = 1.0
+        self._annot_stack = []      # [(page_index, [annot, ...])] for undo
         self._label.setMouseTracking(True)
         self._label.installEventFilter(self)
 
@@ -35,10 +36,27 @@ class PdfView(QScrollArea):
         """Apply a 'highlight'/'strikeout' annotation over the last selection."""
         if not self._doc or not self._last_sel_rects:
             return False
-        self._doc.annotate(self._last_sel_page, self._last_sel_rects, kind)
+        created = self._doc.annotate(self._last_sel_page, self._last_sel_rects, kind)
+        if created:
+            self._annot_stack.append((self._last_sel_page, created))
+        # clear the blue selection shadow so the new annotation is visible
+        self._sel_overlay = []
+        self._sel_overlay_page = -1
         if self._last_sel_page == self.current_index:
             self._render()
         return True
+
+    def undo_last_annotation(self) -> bool:
+        if not self._annot_stack:
+            return False
+        page_i, annots = self._annot_stack.pop()
+        self._doc.delete_annots(page_i, annots)
+        if page_i == self.current_index:
+            self._render()
+        return True
+
+    def has_unsaved_annotations(self) -> bool:
+        return bool(self._annot_stack)
 
     def highlight(self, index, rects):
         self._highlights = {index: rects}; self.goto(index)

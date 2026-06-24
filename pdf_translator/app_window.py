@@ -72,7 +72,9 @@ class MainWindow(QMainWindow):
         self.annot_mode.addItems(["划词翻译", "高亮", "删除线"])
         self.annot_mode.setToolTip("拖选文字时执行的动作；右键选区也可随时选高亮/删除线")
         tb.addWidget(self.annot_mode)
+        tb.addAction(QAction("撤销标注", self, triggered=self._undo_annotation))
         tb.addAction(QAction("保存标注", self, triggered=self._save_annotations))
+        self._annot_dirty = False
         self.search_box = QLineEdit(); self.search_box.setPlaceholderText("搜索…")
         self.search_box.returnPressed.connect(self._search); tb.addWidget(self.search_box)
 
@@ -361,21 +363,29 @@ class MainWindow(QMainWindow):
         self._pending = text
         mode = self.annot_mode.currentText()
         if mode == "高亮":
-            self.view.annotate_selection("highlight")
+            self._annotate("highlight")
         elif mode == "删除线":
-            self.view.annotate_selection("strikeout")
+            self._annotate("strikeout")
         else:  # 划词翻译:松手即译(空格仍可作为补充触发)
             self._translate_pending()
 
+    def _annotate(self, kind):
+        if self.view.annotate_selection(kind):
+            self._annot_dirty = True
+
+    def _undo_annotation(self):
+        if self.view.undo_last_annotation():
+            self._annot_dirty = True
+
     def _show_annot_menu(self, global_pos):
-        """Right-click menu on a selection: translate / highlight / strikeout / copy."""
+        """Right-click menu on a selection: highlight / strikeout / copy.
+        (翻译 omitted — selection auto-translates already.)"""
         text, page, rects = self.view.last_selection()
         if not rects:
             return
         menu = QMenu(self)
-        menu.addAction("翻译", self._translate_pending)
-        menu.addAction("高亮", lambda: self.view.annotate_selection("highlight"))
-        menu.addAction("删除线", lambda: self.view.annotate_selection("strikeout"))
+        menu.addAction("高亮", lambda: self._annotate("highlight"))
+        menu.addAction("删除线", lambda: self._annotate("strikeout"))
         menu.addAction("复制", lambda: QApplication.clipboard().setText(text))
         menu.exec(global_pos)
 
@@ -386,10 +396,29 @@ class MainWindow(QMainWindow):
             return
         try:
             doc.save()
+            self._annot_dirty = False
             QMessageBox.information(self, "已保存", "标注已写入 PDF 文件。")
         except Exception as e:
             QMessageBox.warning(self, "保存失败",
                 f"无法写入该 PDF：\n{e}\n\n（文件可能被占用或只读）")
+
+    def closeEvent(self, e):
+        """Ask to save annotations before closing if there are unsaved ones."""
+        if getattr(self, "_annot_dirty", False) and self.view._doc is not None:
+            resp = QMessageBox.question(
+                self, "保存标注",
+                "有未保存的标注，要写入 PDF 吗？",
+                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard
+                | QMessageBox.StandardButton.Cancel)
+            if resp == QMessageBox.StandardButton.Cancel:
+                e.ignore(); return
+            if resp == QMessageBox.StandardButton.Save:
+                try:
+                    self.view._doc.save()
+                except Exception as ex:
+                    QMessageBox.warning(self, "保存失败", f"无法写入：\n{ex}")
+                    e.ignore(); return
+        e.accept()
 
     def _open_settings(self):
         from pdf_translator.settings_dialog import SettingsDialog

@@ -41,3 +41,17 @@ def test_annotate_and_save_roundtrip(tmp_path):
 
     d2 = PdfDocument.open(str(p))
     assert d2.annotation_count(0) == 1   # annotation persisted to disk
+
+
+def test_annotate_undo_by_xref(tmp_path):
+    import fitz
+    from pdf_translator.pdf_document import PdfDocument
+    p = tmp_path / "u.pdf"
+    doc = fitz.open(); page = doc.new_page(); page.insert_text((72, 100), "Hello world")
+    doc.save(str(p)); doc.close()
+    d = PdfDocument.open(str(p))
+    w = [x for x in d.page_words(0) if x[4] == "world"][0]
+    xrefs = d.annotate(0, [w[:4]], "highlight")
+    assert d.annotation_count(0) == 1 and len(xrefs) == 1
+    d.delete_annots(0, xrefs)          # undo by xref
+    assert d.annotation_count(0) == 0

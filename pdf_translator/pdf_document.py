@@ -51,16 +51,27 @@ class PdfDocument:
 
         rects: iterable of fitz.Rect or (x0,y0,x1,y1) tuples (PDF coordinates).
         kind: 'highlight' or 'strikeout'.
+        Returns the list of created annotation objects (for undo).
         """
         page = self._doc[index]
+        xrefs = []
         for r in rects:
             rect = fitz.Rect(r)
             if kind == "highlight":
-                page.add_highlight_annot(rect)
+                xrefs.append(page.add_highlight_annot(rect).xref)
             elif kind == "strikeout":
-                page.add_strikeout_annot(rect)
+                xrefs.append(page.add_strikeout_annot(rect).xref)
             else:
                 raise ValueError(f"unknown annotation kind: {kind}")
+        return xrefs
+
+    def delete_annots(self, index: int, xrefs):
+        """Delete annotations by xref (stable across Page wrapper instances)."""
+        page = self._doc[index]
+        want = set(xrefs)
+        for a in list(page.annots()):
+            if a.xref in want:
+                page.delete_annot(a)
 
     def annotation_count(self, index: int) -> int:
         return sum(1 for _ in self._doc[index].annots())

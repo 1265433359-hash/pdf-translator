@@ -1,5 +1,6 @@
 import json, httpx
 from pdf_translator.engines.openai_compat import OpenAICompatEngine
+from pdf_translator.glossary import Glossary
 
 
 def make_client(handler):
@@ -23,6 +24,19 @@ def test_translate_sends_model_and_key():
     eng.translate("hi")
     assert seen["auth"] == "Bearer secret"
     assert seen["body"]["model"] == "deepseek-chat"
+
+
+def test_translate_injects_matching_glossary_term_into_system(tmp_path):
+    seen = {}
+    def handler(req):
+        seen["body"] = json.loads(req.content)
+        return httpx.Response(200, json={"choices":[{"message":{"content":"x"}}]})
+    g = Glossary(tmp_path / "g.json")
+    g.set("transformer", "变换器")
+    eng = OpenAICompatEngine("https://x/v1", "k", "m", http=make_client(handler), glossary=g)
+    eng.translate("The transformer architecture")
+    system = seen["body"]["messages"][0]["content"]
+    assert "transformer" in system and "变换器" in system
 
 
 def _sse(*deltas):

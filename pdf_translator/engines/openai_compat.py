@@ -7,17 +7,21 @@ DEFAULT_PROMPT = "你是专业学术翻译。把用户给的英文准确译成�
 
 
 class OpenAICompatEngine(Translator):
-    def __init__(self, base_url, api_key, model, prompt=DEFAULT_PROMPT, http=None):
+    def __init__(self, base_url, api_key, model, prompt=DEFAULT_PROMPT, http=None, glossary=None):
         self.base_url = base_url.rstrip("/"); self.api_key = api_key
         self.model = model; self.prompt = prompt
+        self.glossary = glossary
         self._http = http or httpx.Client(timeout=60)
 
     def _headers(self):
         return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
+    def _system(self, text):
+        return self.glossary.apply_to_prompt(self.prompt, text) if self.glossary else self.prompt
+
     def translate(self, text, target="zh"):
         body = {"model": self.model, "messages": [
-            {"role": "system", "content": self.prompt},
+            {"role": "system", "content": self._system(text)},
             {"role": "user", "content": text}]}
         r = self._http.post(f"{self.base_url}/chat/completions", headers=self._headers(), json=body)
         r.raise_for_status()
@@ -25,7 +29,7 @@ class OpenAICompatEngine(Translator):
 
     def translate_stream(self, text, target="zh") -> Iterator[str]:
         body = {"model": self.model, "stream": True, "messages": [
-            {"role": "system", "content": self.prompt},
+            {"role": "system", "content": self._system(text)},
             {"role": "user", "content": text}]}
         with self._http.stream("POST", f"{self.base_url}/chat/completions",
                                headers=self._headers(), json=body) as r:

@@ -49,6 +49,10 @@ class MainWindow(QMainWindow):
         self.search_box = QLineEdit(); self.search_box.setPlaceholderText("搜索…")
         self.search_box.returnPressed.connect(self._search); tb.addWidget(self.search_box)
 
+        # --- Task 10.2: export vocabulary to Anki ---
+        self.export_vocab_action = QAction("导出生词本", self, triggered=self._export_vocab)
+        tb.addAction(self.export_vocab_action)
+
         # --- Task 7.1: view-mode toggle (双栏 / 原位替换) ---
         self.view_mode = QComboBox()
         self.view_mode.addItems(["视图：双栏", "视图：原位替换"])
@@ -87,6 +91,19 @@ class MainWindow(QMainWindow):
             if not doc.has_text_layer():
                 QMessageBox.warning(self, "无法翻译",
                     "此 PDF 没有可提取的文字（疑似扫描件），暂不支持翻译。OCR 将在后续版本支持。")
+
+    def _export_vocab(self):
+        from pdf_translator.anki_export import export_csv
+        rows = self.vocab.all()
+        if not rows:
+            QMessageBox.information(self, "生词本为空", "当前生词本没有可导出的单词。")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "导出 Anki", "anki.txt", "文本 (*.txt)")
+        if not path:
+            return
+        export_csv(rows, path)
+        QMessageBox.information(self, "导出完成", f"已导出 {len(rows)} 个单词到\n{path}")
 
     def _search(self):
         q = self.search_box.text().strip()

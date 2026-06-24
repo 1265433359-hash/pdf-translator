@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (QMainWindow, QToolBar, QFileDialog, QSpinBox, QLineEdit,
                                QMessageBox, QDockWidget, QLabel, QSplitter,
                                QProgressDialog, QComboBox, QToolButton, QMenu,
-                               QStackedWidget)
+                               QStackedWidget, QTreeWidget, QTreeWidgetItem)
 from PySide6.QtGui import QAction, QShortcut, QKeySequence, QCursor
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
@@ -51,6 +51,14 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.home)   # index 0
         self.stack.addWidget(self.view)   # index 1 — full-width PDF
         self.setCentralWidget(self.stack)
+        # outline / bookmarks dock (hidden until a PDF with a TOC is opened)
+        self.outline_tree = QTreeWidget()
+        self.outline_tree.setHeaderHidden(True)
+        self.outline_tree.itemClicked.connect(self._on_outline_clicked)
+        self.outline_dock = QDockWidget("目录", self)
+        self.outline_dock.setWidget(self.outline_tree)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.outline_dock)
+        self.outline_dock.hide()
         tb = QToolBar(); self.addToolBar(tb)
         tb.addAction(QAction("首页", self, triggered=self._go_home))
         tb.addAction(QAction("打开", self, triggered=self._open))
@@ -69,6 +77,7 @@ class MainWindow(QMainWindow):
         tb.addAction(QAction("放大", self, triggered=lambda: self.view.set_zoom(self.view._zoom * 1.2)))
         tb.addAction(QAction("缩小", self, triggered=lambda: self.view.set_zoom(self.view._zoom / 1.2)))
         tb.addAction(QAction("适应宽度", self, triggered=self.view.fit_width))
+        tb.addAction(QAction("目录", self, triggered=self._toggle_outline))
         # --- annotation mode + save ---
         self.annot_mode = QComboBox()
         self.annot_mode.addItems(["划词翻译", "高亮", "删除线"])
@@ -147,6 +156,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(1)   # switch to the reader
         self.view.fit_width()  # auto-fit the left pane to the opened article
         self._current_path = path
+        self._populate_outline(doc.get_toc())
         if 0 < saved_page < doc.page_count:
             self.view.goto(saved_page)    # resume where you left off
         recents.add_recent(path)
@@ -410,6 +420,34 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "保存失败",
                 f"无法写入该 PDF：\n{e}\n\n（文件可能被占用或只读）")
+
+    def _populate_outline(self, toc):
+        """Build the outline tree from PyMuPDF TOC entries [level, title, page]."""
+        self.outline_tree.clear()
+        if not toc:
+            self.outline_dock.hide()
+            return
+        stack = []  # (level, item)
+        for level, title, page in toc:
+            item = QTreeWidgetItem([title.strip() or "(无标题)"])
+            item.setData(0, Qt.ItemDataRole.UserRole, page)
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+            if stack:
+                stack[-1][1].addChild(item)
+            else:
+                self.outline_tree.addTopLevelItem(item)
+            stack.append((level, item))
+        self.outline_tree.expandToDepth(0)
+        self.outline_dock.show()  # auto-reveal when the PDF has bookmarks
+
+    def _on_outline_clicked(self, item, _col):
+        page = item.data(0, Qt.ItemDataRole.UserRole)
+        if page:
+            self.view.goto(int(page) - 1)  # TOC pages are 1-based
+
+    def _toggle_outline(self):
+        self.outline_dock.setVisible(not self.outline_dock.isVisible())
 
     def _open_vocab(self):
         from pdf_translator.vocab_dialog import VocabularyDialog

@@ -36,6 +36,13 @@ class PdfDocument:
                 hits.append((i, r))
         return hits
 
+    def get_toc(self) -> list:
+        """Outline/bookmarks: list of [level, title, page_number(1-based)]."""
+        try:
+            return self._doc.get_toc()
+        except Exception:
+            return []
+
     def has_text_layer(self) -> bool:
         for i in range(self.page_count):
             if self._doc[i].get_text("text").strip():

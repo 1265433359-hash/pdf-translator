@@ -28,8 +28,12 @@ from pdf_translator.translate_queue import estimate_tokens
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PDF 双语翻译阅读器"); self.resize(1200, 800)
+        self.setWindowTitle("PDF 双语翻译阅读器")
         self.settings = Settings.load()
+        self.resize(self.settings.win_w, self.settings.win_h)
+        if self.settings.win_max:
+            self.setWindowState(Qt.WindowState.WindowMaximized)
+        self._current_path = None
         if self.settings.engine == "youdao":  # 有道 is now a separate source, not an LLM engine
             self.settings.engine = "deepseek"
         self.cache = TranslationCache()
@@ -111,10 +115,13 @@ class MainWindow(QMainWindow):
         sc.activated.connect(self._translate_pending)
 
     def _on_page_changed(self, index):
-        """Keep the toolbar page box in sync when the view changes page (wheel/keys)."""
+        """Keep the toolbar page box in sync; remember the reading position."""
         self.page_box.blockSignals(True)
         self.page_box.setValue(index + 1)
         self.page_box.blockSignals(False)
+        if self._current_path:
+            from pdf_translator import recents
+            recents.set_page(self._current_path, index)
 
     def _open(self):
         path, _ = QFileDialog.getOpenFileName(self, "打开 PDF", "", "PDF (*.pdf)")
@@ -133,11 +140,15 @@ class MainWindow(QMainWindow):
             recents.remove_recent(path)
             self._refresh_recents_menu()
             return
+        saved_page = recents.page_for(path)   # before add_recent
         doc = PdfDocument.open(path)
         self.view.load(doc)
         self.page_box.setMaximum(doc.page_count)
         self.stack.setCurrentIndex(1)   # switch to the reader
         self.view.fit_width()  # auto-fit the left pane to the opened article
+        self._current_path = path
+        if 0 < saved_page < doc.page_count:
+            self.view.goto(saved_page)    # resume where you left off
         recents.add_recent(path)
         self._refresh_recents_menu()
         self.setWindowTitle(f"{os.path.basename(path)} — PDF 双语翻译阅读器")
@@ -400,8 +411,16 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "保存失败",
                 f"无法写入该 PDF：\n{e}\n\n（文件可能被占用或只读）")
 
+    def _save_window_state(self):
+        self.settings.win_max = self.isMaximized()
+        if not self.isMaximized():
+            self.settings.win_w = self.width()
+            self.settings.win_h = self.height()
+        self.settings.save()
+
     def closeEvent(self, e):
-        """Ask to save annotations before closing if there are unsaved ones."""
+        """Save window state; ask to save annotations if there are unsaved ones."""
+        self._save_window_state()
         if getattr(self, "_annot_dirty", False) and self.view._doc is not None:
             resp = QMessageBox.question(
                 self, "保存标注",

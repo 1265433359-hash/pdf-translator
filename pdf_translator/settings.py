@@ -14,6 +14,9 @@ class Settings:
     custom_base_url: str = ""
     use_llm: bool = True       # show 大模型 translation source
     use_youdao: bool = False   # show 有道词典 translation source (needs appKey/secret)
+    win_w: int = 1200
+    win_h: int = 800
+    win_max: bool = False
 
     @classmethod
     def load(cls) -> "Settings":

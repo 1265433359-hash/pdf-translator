@@ -23,3 +23,61 @@ def test_translate_sends_model_and_key():
     eng.translate("hi")
     assert seen["auth"] == "Bearer secret"
     assert seen["body"]["model"] == "deepseek-chat"
+
+
+def _sse(*deltas):
+    lines = []
+    for d in deltas:
+        lines.append('data: ' + json.dumps({"choices":[{"delta":{"content":d}}]}))
+    lines.append("data: [DONE]")
+    return "\n\n".join(lines) + "\n\n"
+
+
+def test_translate_stream_yields_deltas_in_order():
+    def handler(req):
+        return httpx.Response(200, content=_sse("你好", "世界", "！"),
+                              headers={"content-type": "text/event-stream"})
+    eng = OpenAICompatEngine("https://x/v1", "k", "m", http=make_client(handler))
+    assert list(eng.translate_stream("Hello world!")) == ["你好", "世界", "！"]
+
+
+def test_translate_stream_skips_malformed_lines():
+    body = ("data: " + json.dumps({"choices":[{"delta":{"content":"你好"}}]}) + "\n\n"
+            "data: not-json\n\n"
+            "data: " + json.dumps({"choices":[{"delta":{"content":"世界"}}]}) + "\n\n"
+            "data: [DONE]\n\n")
+    def handler(req):
+        return httpx.Response(200, content=body,
+                              headers={"content-type": "text/event-stream"})
+    eng = OpenAICompatEngine("https://x/v1", "k", "m", http=make_client(handler))
+    assert list(eng.translate_stream("hi")) == ["你好", "世界"]
+
+
+def test_lookup_word_parses_json_wrapped_in_prose():
+    content = ('Here is the JSON: {"phonetic":"/həˈləʊ/",'
+               '"meanings":["int. 你好"],"collocations":["say hello"],'
+               '"examples":["Hello there."]} Hope it helps.')
+    def handler(req):
+        return httpx.Response(200, json={"choices":[{"message":{"content":content}}]})
+    eng = OpenAICompatEngine("https://x/v1", "k", "m", http=make_client(handler))
+    entry = eng.lookup_word("hello")
+    assert entry is not None
+    assert entry.word == "hello"
+    assert entry.phonetic == "/həˈləʊ/"
+    assert entry.meanings == ["int. 你好"]
+    assert entry.collocations == ["say hello"]
+    assert entry.examples == ["Hello there."]
+
+
+def test_lookup_word_returns_none_on_error_status():
+    def handler(req):
+        return httpx.Response(500, text="boom")
+    eng = OpenAICompatEngine("https://x/v1", "k", "m", http=make_client(handler))
+    assert eng.lookup_word("hello") is None
+
+
+def test_lookup_word_returns_none_on_non_json_content():
+    def handler(req):
+        return httpx.Response(200, json={"choices":[{"message":{"content":"sorry no idea"}}]})
+    eng = OpenAICompatEngine("https://x/v1", "k", "m", http=make_client(handler))
+    assert eng.lookup_word("hello") is None

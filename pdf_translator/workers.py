@@ -75,3 +75,19 @@ class WordLookupWorker(QThread):
                 self.found.emit(entry)
         except Exception as e:
             self.failed.emit(str(e))
+
+
+class ModelListWorker(QThread):
+    """Background model-list fetch. `fetch` is a zero-arg callable returning list[str]."""
+    models = Signal(list)
+    failed = Signal(str)
+
+    def __init__(self, fetch):
+        super().__init__()
+        self._fetch = fetch
+
+    def run(self):
+        try:
+            self.models.emit(self._fetch())
+        except Exception as e:
+            self.failed.emit(str(e))

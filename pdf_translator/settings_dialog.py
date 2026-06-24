@@ -4,9 +4,10 @@ from PySide6.QtWidgets import (QDialog, QFormLayout, QVBoxLayout, QHBoxLayout,
                                QDialogButtonBox, QWidget, QGroupBox)
 from PySide6.QtWidgets import QApplication
 from pdf_translator import themes
-from pdf_translator.engines.registry import engine_labels, models_for, build_engine
+from pdf_translator.engines.registry import (engine_labels, models_for,
+                                             build_engine, fetch_models)
 from pdf_translator.glossary import Glossary
-from pdf_translator.workers import TranslateWorker
+from pdf_translator.workers import TranslateWorker, ModelListWorker
 
 YOUDAO_SECRET_KEY = "youdao_secret"
 
@@ -36,9 +37,16 @@ class SettingsDialog(QDialog):
         self.engine_box.currentIndexChanged.connect(self._on_engine_changed)
         form.addRow("引擎", self.engine_box)
 
+        model_wrap = QWidget(); model_row = QHBoxLayout(model_wrap)
+        model_row.setContentsMargins(0, 0, 0, 0)
         self.model_box = QComboBox()
         self.model_box.setEditable(True)  # pick a known version or type your own
-        form.addRow("模型版本", self.model_box)
+        self.fetch_btn = QPushButton("刷新")
+        self.fetch_btn.setToolTip("用当前 API Key 实时获取该引擎可用的模型版本")
+        self.fetch_btn.clicked.connect(self._fetch_models)
+        model_row.addWidget(self.model_box, 1)
+        model_row.addWidget(self.fetch_btn)
+        form.addRow("模型版本", model_wrap)
 
         self.base_url_edit = QLineEdit(settings.custom_base_url)
         self.base_url_edit.setPlaceholderText("仅自定义引擎需要")
@@ -215,6 +223,42 @@ class SettingsDialog(QDialog):
     def _on_test_fail(self, err):
         self.test_btn.setEnabled(True)
         self.test_result.setText(f"✗ 失败：{err[:80]}")
+
+    # --- live model list ---------------------------------------------------
+    def _fetch_models(self):
+        """Live-fetch the models the current key can use; fill the dropdown."""
+        name = self.current_engine()
+        key = self.key_edit.text().strip()
+        if name == "youdao":
+            self.test_result.setText("✗ 有道无需选择模型")
+            return
+        if not key:
+            self.test_result.setText("✗ 请先填写 API Key")
+            return
+        base_url = self.base_url_edit.text().strip() or None
+        self.fetch_btn.setEnabled(False)
+        self.test_result.setText("获取模型中…")
+        self._model_worker = ModelListWorker(lambda: fetch_models(name, key, base_url))
+        self._model_worker.models.connect(self._on_models_fetched)
+        self._model_worker.failed.connect(self._on_models_failed)
+        self._model_worker.start()
+
+    def _on_models_fetched(self, models):
+        self.fetch_btn.setEnabled(True)
+        if not models:
+            self.test_result.setText("✗ 接口未返回模型，可手动输入")
+            return
+        cur = self.model_box.currentText().strip()
+        self.model_box.blockSignals(True)
+        self.model_box.clear()
+        self.model_box.addItems(models)
+        self.model_box.setEditText(cur if cur in models else models[0])
+        self.model_box.blockSignals(False)
+        self.test_result.setText(f"✓ 获取到 {len(models)} 个模型")
+
+    def _on_models_failed(self, err):
+        self.fetch_btn.setEnabled(True)
+        self.test_result.setText(f"✗ 获取失败：{err[:70]}（可手动输入型号）")
 
     # --- save --------------------------------------------------------------
     def save(self):

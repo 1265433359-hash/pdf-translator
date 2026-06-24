@@ -44,6 +44,19 @@ def build_engine(name, api_key, model=None, prompt=None, base_url=None,
                              prompt, glossary=glossary)
 
 
+def fetch_models(name, api_key, base_url=None):
+    """Live model list for an engine using its /models endpoint (youdao unsupported)."""
+    if name == "youdao":
+        raise ValueError("有道翻译无需选择模型")
+    if name == "custom":
+        if not base_url:
+            raise ValueError("自定义引擎需先填 base_url")
+        url = base_url
+    else:
+        url = PRESETS[name]["base_url"]
+    return OpenAICompatEngine(url, api_key, "x").list_models()
+
+
 def engine_labels():
     return [(k, v["label"]) for k, v in PRESETS.items()] + [
         ("youdao", "有道翻译"),

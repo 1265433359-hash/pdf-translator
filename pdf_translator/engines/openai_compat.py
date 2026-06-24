@@ -19,6 +19,13 @@ class OpenAICompatEngine(Translator):
     def _system(self, text):
         return self.glossary.apply_to_prompt(self.prompt, text) if self.glossary else self.prompt
 
+    def list_models(self) -> list[str]:
+        """Live-fetch the models this API key can use via GET /models."""
+        r = self._http.get(f"{self.base_url}/models", headers=self._headers())
+        r.raise_for_status()
+        data = r.json().get("data", [])
+        return sorted(m["id"] for m in data if isinstance(m, dict) and m.get("id"))
+
     def translate(self, text, target="zh"):
         body = {"model": self.model, "messages": [
             {"role": "system", "content": self._system(text)},

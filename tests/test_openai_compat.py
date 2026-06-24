@@ -95,3 +95,14 @@ def test_lookup_word_returns_none_on_non_json_content():
         return httpx.Response(200, json={"choices":[{"message":{"content":"sorry no idea"}}]})
     eng = OpenAICompatEngine("https://x/v1", "k", "m", http=make_client(handler))
     assert eng.lookup_word("hello") is None
+
+
+def test_list_models_parses_data_ids():
+    import httpx
+    from pdf_translator.engines.openai_compat import OpenAICompatEngine
+    def handler(req):
+        assert req.url.path.endswith("/models")
+        return httpx.Response(200, json={"data": [{"id": "m-b"}, {"id": "m-a"}, {"x": 1}]})
+    eng = OpenAICompatEngine("https://x/v1", "k", "m",
+                             http=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert eng.list_models() == ["m-a", "m-b"]  # sorted, skips entries without id

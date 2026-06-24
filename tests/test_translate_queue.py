@@ -24,3 +24,24 @@ def test_batch_with_cache_and_retry():
 
 def test_estimate_tokens():
     assert estimate_tokens(["abcd" * 10]) > 0
+
+
+def test_retry_delay_429_backs_off_longer_and_honors_retry_after():
+    from pdf_translator.translate_queue import _retry_delay
+
+    class Resp:
+        def __init__(self, status, headers=None):
+            self.status_code = status
+            self.headers = headers or {}
+
+    class Err(Exception):
+        def __init__(self, resp):
+            self.response = resp
+
+    # plain error -> exponential base
+    assert _retry_delay(RuntimeError("x"), 0) == 1
+    assert _retry_delay(RuntimeError("x"), 2) == 4
+    # 429 without header -> longer than base
+    assert _retry_delay(Err(Resp(429)), 0) >= 5
+    # 429 with Retry-After honored
+    assert _retry_delay(Err(Resp(429, {"Retry-After": "30"})), 0) == 30

@@ -10,7 +10,7 @@ class Settings:
     model: str = ""
     theme: str = "cream"
     prompt: str = ""
-    concurrency: int = 4
+    concurrency: int = 2  # conservative default; raise in 设置 if your tier allows
     custom_base_url: str = ""
 
     @classmethod

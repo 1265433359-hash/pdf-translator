@@ -38,7 +38,7 @@ class FloatingResult(QWidget):
 
     def _autosize(self):
         """Resize to fit the content: small for a word, larger for a paragraph,
-        capped (then the pane scrolls)."""
+        capped (then the pane scrolls). Keep it anchored & on-screen afterwards."""
         host = self.pane.widget()
         # natural width the content would like (un-wrapped), clamped
         hint_w = host.sizeHint().width()
@@ -52,15 +52,27 @@ class FloatingResult(QWidget):
         total = max(self.MIN_H, min(self.MAX_H, h + 70))
         self.setMaximumHeight(self.MAX_H)
         self.resize(w, total)
+        if self.isVisible():
+            self._reposition()
 
-    def show_near(self, global_pos):
-        """Show near a global point, kept fully on screen."""
+    def _reposition(self):
+        """Anchor to the top-right of the main window, always fully on screen."""
         screen = QGuiApplication.primaryScreen().availableGeometry()
-        x = min(global_pos.x() + 14, screen.right() - self.width() - 8)
-        y = min(global_pos.y() + 14, screen.bottom() - self.height() - 8)
-        x = max(screen.left() + 8, x)
-        y = max(screen.top() + 8, y)
+        parent = self.parent()
+        if parent is not None and parent.isVisible():
+            tr = parent.mapToGlobal(parent.rect().topRight())
+            x = tr.x() - self.width() - 16
+            y = tr.y() + 56  # just below the toolbar
+        else:
+            x = screen.right() - self.width() - 16
+            y = screen.top() + 60
+        x = max(screen.left() + 8, min(x, screen.right() - self.width() - 8))
+        y = max(screen.top() + 8, min(y, screen.bottom() - self.height() - 8))
         self.move(x, y)
+
+    def show_near(self, global_pos=None):
+        """Show the popup at a fixed, always-visible spot (top-right of the window)."""
+        self._reposition()
         self.show()
         self.raise_()
 

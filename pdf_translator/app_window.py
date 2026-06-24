@@ -292,7 +292,9 @@ class MainWindow(QMainWindow):
 
     # --- Task 4.3 ---
     def _on_selection(self, text, rect):
+        # 划词即译:松开鼠标就直接翻译(不必再按空格;空格仍可作为补充触发)
         self._pending = text
+        self._translate_pending()
 
     def _open_settings(self):
         from pdf_translator.settings_dialog import SettingsDialog

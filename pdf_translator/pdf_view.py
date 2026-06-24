@@ -98,9 +98,10 @@ class PdfView(QScrollArea):
         return (label_pos.x() - ox) / self._zoom, (label_pos.y() - oy) / self._zoom
 
     def _collect_selection(self, start, end):
-        """Collect words whose fitz bbox falls inside the PDF-space selection box.
+        """Collect words whose fitz bbox *overlaps* the PDF-space selection box.
 
-        start/end are points in label coordinate space.
+        Uses intersection (not containment) so a rough drag still grabs the words
+        it crosses. start/end are points in label coordinate space.
         Returns (text, QRect) where QRect is in label coordinates.
         """
         if not self._doc:
@@ -109,9 +110,11 @@ class PdfView(QScrollArea):
         ex, ey = self._to_pdf(end)
         x0, x1 = min(sx, ex), max(sx, ex)
         y0, y1 = min(sy, ey), max(sy, ey)
-        words = [w[4] for w in self._doc.page_words(self.current_index)
-                 if w[0] >= x0 - 2 and w[2] <= x1 + 2 and w[1] >= y0 - 2 and w[3] <= y1 + 2]
-        text = " ".join(words).strip()
+        words = [w for w in self._doc.page_words(self.current_index)
+                 if w[2] >= x0 and w[0] <= x1 and w[3] >= y0 and w[1] <= y1]
+        # keep document reading order (block, line, word index)
+        words.sort(key=lambda w: (w[5], w[6], w[7]))
+        text = " ".join(w[4] for w in words).strip()
         return text, QRect(start, end)
 
     def eventFilter(self, obj, e):
@@ -122,9 +125,11 @@ class PdfView(QScrollArea):
             if e.type() == QEvent.Type.MouseButtonRelease and e.button() == Qt.MouseButton.LeftButton:
                 if self._sel_start is not None:
                     end = e.position().toPoint()
+                    drag = (abs(end.x() - self._sel_start.x())
+                            + abs(end.y() - self._sel_start.y()))
                     text, rect = self._collect_selection(self._sel_start, end)
                     self._sel_start = None
-                    if text:
+                    if text and drag >= 5:  # ignore plain clicks; require a real drag
                         self.selection_made.emit(text, rect)
                 return False
         return super().eventFilter(obj, e)

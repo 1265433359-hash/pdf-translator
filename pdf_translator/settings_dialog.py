@@ -50,6 +50,14 @@ class SettingsDialog(QDialog):
         model_row.addWidget(self.fetch_btn)
         form.addRow("模型版本", model_wrap)
 
+        # translation method: LLM vs Youdao dictionary (faster)
+        self.mode_box = QComboBox()
+        self.mode_box.addItem("大模型翻译（质量高，较慢）", "llm")
+        self.mode_box.addItem("有道词典翻译（快，需配有道）", "youdao")
+        mi = 1 if getattr(settings, "translate_mode", "llm") == "youdao" else 0
+        self.mode_box.setCurrentIndex(mi)
+        form.addRow("翻译方式", self.mode_box)
+
         self.base_url_edit = QLineEdit(settings.custom_base_url)
         self.base_url_edit.setPlaceholderText("仅自定义引擎需要")
         form.addRow("自定义 base_url", self.base_url_edit)
@@ -295,6 +303,7 @@ class SettingsDialog(QDialog):
         s = self.settings
         s.engine = self.current_engine()
         s.model = self.model_box.currentText().strip()
+        s.translate_mode = self.mode_box.currentData()
         s.custom_base_url = self.base_url_edit.text().strip()
         s.prompt = self.prompt_edit.toPlainText()
         s.concurrency = self.concurrency_box.value()

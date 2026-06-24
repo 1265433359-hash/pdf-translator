@@ -440,6 +440,8 @@ class MainWindow(QMainWindow):
         from pdf_translator.textutil import is_single_word
         if is_single_word(self._pending):
             self._show_word_card(self._pending); return
+        if self.settings.translate_mode == "youdao":
+            self._translate_phrase_youdao(self._pending); return
         eng = self._current_engine()
         if eng is None: return
         # 两段式:先有道/词典快译,大模型精翻随后
@@ -447,6 +449,28 @@ class MainWindow(QMainWindow):
         self._start_quick_translate(self._pending)
         self._worker = TranslateWorker(eng, self._pending, self.cache, self.settings.model)
         self._worker.chunk.connect(self.pane.append_translation)
+        self._worker.failed.connect(self.pane.main_error)
+        self._worker.start()
+
+    def _youdao_engine(self):
+        ak = self.settings.get_api_key("youdao")
+        sk = self.settings.get_api_key("youdao_secret")
+        if not ak or not sk:
+            return None
+        from pdf_translator.engines.youdao import YoudaoEngine
+        return YoudaoEngine(ak, sk)
+
+    def _translate_phrase_youdao(self, text):
+        """有道-only fast phrase translation (翻译方式=有道词典)."""
+        from pdf_translator.workers import CallWorker
+        eng = self._youdao_engine()
+        if eng is None:
+            QMessageBox.information(self, "需配置有道",
+                "「翻译方式」选了有道词典,请先在「设置」填有道 appKey 与 App Secret。")
+            return
+        self.pane.show_translation_start(text, "有道译文")
+        self._worker = CallWorker(lambda: eng.translate(text))
+        self._worker.ok.connect(self.pane.append_translation)
         self._worker.failed.connect(self.pane.main_error)
         self._worker.start()
 
@@ -470,20 +494,26 @@ class MainWindow(QMainWindow):
         # MUST be called here on the GUI thread (never from a worker).
         entry = self.dictionary.lookup(word)
         if entry is None:
-            # ECDICT not provisioned (or word missing): fall back to the normal
-            # phrase translation so the app stays useful without a dict.
+            # ECDICT miss: fall back to a translation. In 有道 mode use Youdao;
+            # otherwise use the LLM. Keeps the app useful without a dict.
+            if self.settings.translate_mode == "youdao":
+                self._translate_phrase_youdao(word); return
             eng = self._current_engine()
             if eng is None: return
             self.pane.show_translation_start(word, word)
             self._worker = TranslateWorker(eng, word, self.cache, self.settings.model)
             self._worker.chunk.connect(self.pane.append_translation)
-            self._worker.failed.connect(self.pane.show_error)
+            self._worker.failed.connect(self.pane.main_error)
             self._worker.start()
             return
 
         # Instant base info from ECDICT, shown in the right pane.
         self.pane.show_word(entry, on_speak=self._speak,
                             on_add=lambda e: self.vocab.add(e))
+
+        # In 有道/词典 mode, ECDICT is enough — don't call the LLM to enrich.
+        if self.settings.translate_mode == "youdao":
+            return
 
         # Enrich collocations/examples asynchronously via the engine (network).
         # Enrich only if a key is configured; never pop a dialog from the

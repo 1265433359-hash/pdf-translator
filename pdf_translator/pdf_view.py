@@ -145,27 +145,46 @@ class PdfView(QScrollArea):
         ox, oy = self._pixmap_offset()
         return (label_pos.x() - ox) / self._zoom, (label_pos.y() - oy) / self._zoom
 
-    def _collect_selection(self, start, end):
-        """Collect words whose fitz bbox *overlaps* the PDF-space selection box.
+    @staticmethod
+    def _nearest_word_index(px, py, words):
+        """Index of the word matching point (px, py) in reading order.
 
-        Uses intersection (not containment) so a rough drag still grabs the words
-        it crosses. start/end are points in label coordinate space.
+        Prefers a word whose bbox contains the point; otherwise the nearest word,
+        weighting vertical distance so we land on the correct line.
+        """
+        best, best_d = 0, float("inf")
+        for i, w in enumerate(words):
+            if w[0] <= px <= w[2] and w[1] <= py <= w[3]:
+                return i
+            cx, cy = (w[0] + w[2]) / 2, (w[1] + w[3]) / 2
+            d = (cy - py) ** 2 * 4 + (cx - px) ** 2  # line first, then column
+            if d < best_d:
+                best_d, best = d, i
+        return best
+
+    def _collect_selection(self, start, end):
+        """Flow text selection: from the start word to the end word in reading
+        order (spanning whole lines between them), like selecting text in a
+        browser/PDF reader. start/end are points in label coordinate space.
         Returns (text, QRect) where QRect is in label coordinates.
         """
         if not self._doc:
             return "", QRect(start, end)
+        words = list(self._doc.page_words(self.current_index))
+        words.sort(key=lambda w: (w[5], w[6], w[7]))  # reading order
+        if not words:
+            self._last_sel_rects = []; self._last_sel_text = ""
+            self._last_sel_page = self.current_index
+            return "", QRect(start, end)
         sx, sy = self._to_pdf(start)
         ex, ey = self._to_pdf(end)
-        x0, x1 = min(sx, ex), max(sx, ex)
-        y0, y1 = min(sy, ey), max(sy, ey)
-        words = [w for w in self._doc.page_words(self.current_index)
-                 if w[2] >= x0 and w[0] <= x1 and w[3] >= y0 and w[1] <= y1]
-        # keep document reading order (block, line, word index)
-        words.sort(key=lambda w: (w[5], w[6], w[7]))
-        text = " ".join(w[4] for w in words).strip()
-        # remember the selection in PDF space for annotation
+        i0 = self._nearest_word_index(sx, sy, words)
+        i1 = self._nearest_word_index(ex, ey, words)
+        lo, hi = sorted((i0, i1))
+        sel = words[lo:hi + 1]
+        text = " ".join(w[4] for w in sel).strip()
         self._last_sel_page = self.current_index
-        self._last_sel_rects = [tuple(w[:4]) for w in words]
+        self._last_sel_rects = [tuple(w[:4]) for w in sel]
         self._last_sel_text = text
         return text, QRect(start, end)
 

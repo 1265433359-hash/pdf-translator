@@ -14,9 +14,11 @@ class TranslationPane(QScrollArea):
         self.setWidget(self._host)
         self.setWidgetResizable(True)
         self._stream_label = None
+        self._quick_label = None
 
     def clear(self):
         self._stream_label = None
+        self._quick_label = None
         while self._lay.count():
             item = self._lay.takeAt(0)
             w = item.widget()
@@ -78,6 +80,31 @@ class TranslationPane(QScrollArea):
         if self._stream_label.text() == "翻译中…":
             self._stream_label.setText("")
         self._stream_label.setText(self._stream_label.text() + chunk)
+
+    # --- two-stage: 有道/词典快译 first, 大模型精翻 after -------------------
+    def start_two_stage(self, source_text=""):
+        self.clear()
+        if source_text:
+            self._lay.addWidget(self._wrap_label("【原文】"))
+            s = self._wrap_label(source_text)
+            s.setStyleSheet("color: gray;")
+            self._lay.addWidget(s)
+        self._lay.addWidget(self._wrap_label("【快速译文 · 有道/词典】"))
+        self._quick_label = self._wrap_label("…")
+        self._lay.addWidget(self._quick_label)
+        self._lay.addWidget(self._wrap_label("【精翻 · 大模型】"))
+        self._stream_label = self._wrap_label("翻译中…")
+        self._lay.addWidget(self._stream_label)
+
+    def set_quick(self, text):
+        if self._quick_label is not None:
+            self._quick_label.setText(text)
+
+    def main_error(self, msg):
+        if self._stream_label is not None:
+            self._stream_label.setText("⚠ " + msg)
+        else:
+            self.show_error(msg)
 
     def show_error(self, msg):
         self.clear()

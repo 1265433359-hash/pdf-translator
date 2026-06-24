@@ -433,11 +433,28 @@ class MainWindow(QMainWindow):
             self._show_word_card(self._pending); return
         eng = self._current_engine()
         if eng is None: return
-        self.pane.show_translation_start(self._pending, "译文")  # 原文+译文显示在右栏
+        # 两段式:先有道/词典快译,大模型精翻随后
+        self.pane.start_two_stage(self._pending)
+        self._start_quick_translate(self._pending)
         self._worker = TranslateWorker(eng, self._pending, self.cache, self.settings.model)
         self._worker.chunk.connect(self.pane.append_translation)
-        self._worker.failed.connect(self.pane.show_error)
+        self._worker.failed.connect(self.pane.main_error)
         self._worker.start()
+
+    def _start_quick_translate(self, text):
+        """Stage 1: instant 有道 translation (if configured) into the 快速译文 slot."""
+        from pdf_translator.workers import CallWorker
+        ak = self.settings.get_api_key("youdao")
+        sk = self.settings.get_api_key("youdao_secret")
+        if not ak or not sk:
+            self.pane.set_quick("（未配置有道；可在「设置」填 appKey/appSecret 启用即时快译）")
+            return
+        from pdf_translator.engines.youdao import YoudaoEngine
+        eng = YoudaoEngine(ak, sk)
+        self._quick_worker = CallWorker(lambda: eng.translate(text))
+        self._quick_worker.ok.connect(self.pane.set_quick)
+        self._quick_worker.failed.connect(lambda e: self.pane.set_quick(f"（有道失败：{e[:50]}）"))
+        self._quick_worker.start()
 
     def _show_word_card(self, word):
         # Dictionary.lookup uses a main-thread-bound sqlite connection, so it

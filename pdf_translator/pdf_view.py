@@ -22,6 +22,8 @@ class PdfView(QScrollArea):
         self._last_sel_text = ""
         self._sel_overlay = []      # PDF rects to draw as the current selection shadow
         self._sel_overlay_page = -1
+        self._base_pm = None        # cached page pixmap without the live selection
+        self._scale = 1.0
         self._label.setMouseTracking(True)
         self._label.installEventFilter(self)
 
@@ -99,18 +101,31 @@ class PdfView(QScrollArea):
         dpr = self.devicePixelRatioF() or 1.0
         self._dpr = dpr
         scale = self._zoom * dpr  # render at true device pixels for crisp text
+        self._scale = scale
         img = self._doc.render_page(self.current_index, scale)
         pm = QPixmap.fromImage(img)  # device-pixel canvas
         for r in self._highlights.get(self.current_index, []):
             p = QPainter(pm); p.fillRect(int(r.x0 * scale), int(r.y0 * scale),
                 int((r.x1 - r.x0) * scale), int((r.y1 - r.y0) * scale), QColor(255, 235, 59, 90)); p.end()
-        # current selection shadow (live feedback while reading)
+        self._base_pm = pm  # base without the live selection; selection drawn on a copy
+        self._paint_overlay()
+
+    def _paint_overlay(self):
+        """Cheap repaint: copy the cached base pixmap and draw the live selection.
+
+        Avoids re-rendering the PDF page on every mouse-move, so selection is
+        real-time like a browser PDF viewer.
+        """
+        if self._base_pm is None:
+            return
+        pm = self._base_pm.copy()
+        scale = self._scale
         if self._sel_overlay_page == self.current_index:
             for r in self._sel_overlay:
                 x0, y0, x1, y1 = r
                 p = QPainter(pm); p.fillRect(int(x0 * scale), int(y0 * scale),
                     int((x1 - x0) * scale), int((y1 - y0) * scale), QColor(51, 102, 204, 70)); p.end()
-        pm.setDevicePixelRatio(dpr)  # display at logical size -> sharp on HiDPI
+        pm.setDevicePixelRatio(self._dpr)  # display at logical size -> sharp on HiDPI
         self._label.setPixmap(pm)
 
     def _pixmap_offset(self):
@@ -159,6 +174,13 @@ class PdfView(QScrollArea):
             if e.type() == QEvent.Type.MouseButtonPress and e.button() == Qt.MouseButton.LeftButton:
                 self._sel_start = e.position().toPoint()
                 return False
+            if e.type() == QEvent.Type.MouseMove and self._sel_start is not None:
+                # live selection: update the shadow as the mouse drags (no re-render)
+                self._collect_selection(self._sel_start, e.position().toPoint())
+                self._sel_overlay = list(self._last_sel_rects)
+                self._sel_overlay_page = self._last_sel_page
+                self._paint_overlay()
+                return False
             if e.type() == QEvent.Type.MouseButtonRelease and e.button() == Qt.MouseButton.LeftButton:
                 if self._sel_start is not None:
                     end = e.position().toPoint()
@@ -169,7 +191,7 @@ class PdfView(QScrollArea):
                     if text and drag >= 5:  # ignore plain clicks; require a real drag
                         self._sel_overlay = list(self._last_sel_rects)
                         self._sel_overlay_page = self._last_sel_page
-                        self._render()  # show the selection shadow immediately
+                        self._paint_overlay()
                         self.selection_made.emit(text, rect)
                 return False
             if e.type() == QEvent.Type.ContextMenu:

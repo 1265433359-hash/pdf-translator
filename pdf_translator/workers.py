@@ -27,3 +27,20 @@ class TranslateWorker(QThread):
             self.finished_text.emit(out)
         except Exception as e:
             self.failed.emit(str(e))
+
+
+class WordLookupWorker(QThread):
+    """Run engine.lookup_word(word) off the main thread to enrich a WordEntry
+    with collocations/examples (network call). Emits the resulting WordEntry."""
+    found = Signal(object); failed = Signal(str)
+
+    def __init__(self, engine, word):
+        super().__init__(); self._engine = engine; self._word = word
+
+    def run(self):
+        try:
+            entry = self._engine.lookup_word(self._word)
+            if entry is not None:
+                self.found.emit(entry)
+        except Exception as e:
+            self.failed.emit(str(e))

@@ -5,10 +5,13 @@ from PySide6.QtCore import Qt
 from pdf_translator.pdf_view import PdfView
 from pdf_translator.pdf_document import PdfDocument
 from pdf_translator.popup import TransPopup
-from pdf_translator.workers import TranslateWorker
+from pdf_translator.workers import TranslateWorker, WordLookupWorker
 from pdf_translator.settings import Settings
 from pdf_translator.cache import TranslationCache
 from pdf_translator.engines.registry import build_engine
+from pdf_translator.dictionary import Dictionary
+from pdf_translator.vocabulary import Vocabulary
+from pdf_translator.word_card import WordCard
 
 
 class MainWindow(QMainWindow):
@@ -29,6 +32,11 @@ class MainWindow(QMainWindow):
         tb.addAction(QAction("适应宽度", self, triggered=self.view.fit_width))
         self.search_box = QLineEdit(); self.search_box.setPlaceholderText("搜索…")
         self.search_box.returnPressed.connect(self._search); tb.addWidget(self.search_box)
+
+        # --- Task 5.5: dictionary, vocabulary & word card ---
+        self.dictionary = Dictionary()
+        self.vocab = Vocabulary()
+        self.word_card = WordCard(self.vocab)
 
         # --- Task 4.3: selection-triggered translation popup ---
         self._pending = None
@@ -82,14 +90,40 @@ class MainWindow(QMainWindow):
         self._worker.start()
 
     def _show_word_card(self, word):
-        # TODO Phase 5: replace with WordCard dictionary card
+        # Dictionary.lookup uses a main-thread-bound sqlite connection, so it
+        # MUST be called here on the GUI thread (never from a worker).
+        entry = self.dictionary.lookup(word)
+        if entry is None:
+            # ECDICT not provisioned (or word missing): fall back to the normal
+            # phrase translation popup so the app stays useful without a dict.
+            eng = self._current_engine()
+            if eng is None: return
+            self.popup.set_loading(); self.popup.show_at(self.cursor().pos())
+            self._worker = TranslateWorker(eng, word, self.cache, self.settings.model)
+            self._worker.chunk.connect(self.popup.append_chunk)
+            self._worker.failed.connect(self.popup.set_error)
+            self._worker.start()
+            return
+
+        # Instant base info from ECDICT.
+        self.word_card.show_entry(entry, self.cursor().pos())
+
+        # Enrich collocations/examples asynchronously via the engine (network).
         eng = self._current_engine()
         if eng is None: return
-        self.popup.set_loading(); self.popup.show_at(self.cursor().pos())
-        self._worker = TranslateWorker(eng, word, self.cache, self.settings.model)
-        self._worker.chunk.connect(self.popup.append_chunk)
-        self._worker.failed.connect(self.popup.set_error)
-        self._worker.start()
+        self._enrich_worker = WordLookupWorker(eng, word)
+        self._enrich_worker.found.connect(
+            lambda enriched, base=entry: self._merge_word_entry(base, enriched))
+        self._enrich_worker.start()
+
+    def _merge_word_entry(self, base, enriched):
+        # Merge engine-supplied collocations/examples into the displayed entry
+        # and refresh the card (entry may already be dismissed; show_entry is safe).
+        if enriched.collocations:
+            base.collocations = enriched.collocations
+        if enriched.examples:
+            base.examples = enriched.examples
+        self.word_card.show_entry(base, self.word_card.pos())
 
     def _on_pin_toggled(self, pinned):
         if pinned:

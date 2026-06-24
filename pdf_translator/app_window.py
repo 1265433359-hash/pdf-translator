@@ -29,6 +29,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("PDF 双语翻译阅读器"); self.resize(1200, 800)
         self.settings = Settings.load()
+        if self.settings.engine == "youdao":  # 有道 is now a separate source, not an LLM engine
+            self.settings.engine = "deepseek"
         self.cache = TranslationCache()
         self.glossary = Glossary()
         self.view = PdfView()
@@ -440,17 +442,7 @@ class MainWindow(QMainWindow):
         from pdf_translator.textutil import is_single_word
         if is_single_word(self._pending):
             self._show_word_card(self._pending); return
-        if self.settings.translate_mode == "youdao":
-            self._translate_phrase_youdao(self._pending); return
-        eng = self._current_engine()
-        if eng is None: return
-        # 两段式:先有道/词典快译,大模型精翻随后
-        self.pane.start_two_stage(self._pending)
-        self._start_quick_translate(self._pending)
-        self._worker = TranslateWorker(eng, self._pending, self.cache, self.settings.model)
-        self._worker.chunk.connect(self.pane.append_translation)
-        self._worker.failed.connect(self.pane.main_error)
-        self._worker.start()
+        self._translate_phrase(self._pending)
 
     def _youdao_engine(self):
         ak = self.settings.get_api_key("youdao")
@@ -460,64 +452,52 @@ class MainWindow(QMainWindow):
         from pdf_translator.engines.youdao import YoudaoEngine
         return YoudaoEngine(ak, sk)
 
-    def _translate_phrase_youdao(self, text):
-        """有道-only fast phrase translation (翻译方式=有道词典)."""
+    def _translate_phrase(self, text):
+        """Show every enabled translation source for a phrase (有道 / 大模型)."""
         from pdf_translator.workers import CallWorker
-        eng = self._youdao_engine()
-        if eng is None:
-            QMessageBox.information(self, "需配置有道",
-                "「翻译方式」选了有道词典,请先在「设置」填有道 appKey 与 App Secret。")
+        yeng = self._youdao_engine() if self.settings.use_youdao else None
+        youdao_unconfigured = self.settings.use_youdao and yeng is None
+        want_youdao = self.settings.use_youdao  # show the section either way
+        want_llm = self.settings.use_llm
+        if not want_youdao and not want_llm:
+            self.pane.show_error("未启用任何翻译来源：请在「设置」勾选 大模型 或 有道词典。")
             return
-        self.pane.show_translation_start(text, "有道译文")
-        self._worker = CallWorker(lambda: eng.translate(text))
-        self._worker.ok.connect(self.pane.append_translation)
-        self._worker.failed.connect(self.pane.main_error)
-        self._worker.start()
-
-    def _start_quick_translate(self, text):
-        """Stage 1: instant 有道 translation (if configured) into the 快速译文 slot."""
-        from pdf_translator.workers import CallWorker
-        ak = self.settings.get_api_key("youdao")
-        sk = self.settings.get_api_key("youdao_secret")
-        if not ak or not sk:
-            self.pane.set_quick("（未配置有道；可在「设置」填 appKey/appSecret 启用即时快译）")
-            return
-        from pdf_translator.engines.youdao import YoudaoEngine
-        eng = YoudaoEngine(ak, sk)
-        self._quick_worker = CallWorker(lambda: eng.translate(text))
-        self._quick_worker.ok.connect(self.pane.set_quick)
-        self._quick_worker.failed.connect(lambda e: self.pane.set_quick(f"（有道失败：{e[:50]}）"))
-        self._quick_worker.start()
+        self.pane.start_sources(text, youdao=want_youdao, llm=want_llm)
+        if want_youdao:
+            if youdao_unconfigured:
+                self.pane.set_youdao("（有道未配置 appKey/appSecret，请在设置填写）")
+            else:
+                self._quick_worker = CallWorker(lambda: yeng.translate(text))
+                self._quick_worker.ok.connect(self.pane.set_youdao)
+                self._quick_worker.failed.connect(
+                    lambda e: self.pane.set_youdao(f"（有道失败：{e[:50]}）"))
+                self._quick_worker.start()
+        if want_llm:
+            eng = self._current_engine()
+            if eng is None:
+                return  # _current_engine showed the API-key dialog
+            self._worker = TranslateWorker(eng, text, self.cache, self.settings.model)
+            self._worker.chunk.connect(self.pane.append_translation)
+            self._worker.failed.connect(self.pane.main_error)
+            self._worker.start()
 
     def _show_word_card(self, word):
         # Dictionary.lookup uses a main-thread-bound sqlite connection, so it
         # MUST be called here on the GUI thread (never from a worker).
         entry = self.dictionary.lookup(word)
         if entry is None:
-            # ECDICT miss: fall back to a translation. In 有道 mode use Youdao;
-            # otherwise use the LLM. Keeps the app useful without a dict.
-            if self.settings.translate_mode == "youdao":
-                self._translate_phrase_youdao(word); return
-            eng = self._current_engine()
-            if eng is None: return
-            self.pane.show_translation_start(word, word)
-            self._worker = TranslateWorker(eng, word, self.cache, self.settings.model)
-            self._worker.chunk.connect(self.pane.append_translation)
-            self._worker.failed.connect(self.pane.main_error)
-            self._worker.start()
+            # no offline dict entry -> use the enabled phrase sources (有道/大模型)
+            self._translate_phrase(word)
             return
 
-        # Instant base info from ECDICT, shown in the right pane.
+        # Offline dictionary (ECDICT) base info, shown in the right pane.
         self.pane.show_word(entry, on_speak=self._speak,
                             on_add=lambda e: self.vocab.add(e))
 
-        # In 有道/词典 mode, ECDICT is enough — don't call the LLM to enrich.
-        if self.settings.translate_mode == "youdao":
+        # Enrich collocations/examples via the LLM only if 大模型 is enabled and
+        # a key is configured; never pop a dialog from this best-effort path.
+        if not self.settings.use_llm:
             return
-
-        # Enrich collocations/examples asynchronously via the engine (network).
-        # Enrich only if a key is configured; never pop a dialog from the
-        # best-effort enrich path (offline ECDICT-only use must stay silent).
         if not self.settings.get_api_key(self.settings.engine):
             return
         eng = self._current_engine()

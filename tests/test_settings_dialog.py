@@ -36,28 +36,35 @@ def test_save_persists_settings_and_keys(tmp_path, monkeypatch):
     glossary = Glossary(path=str(tmp_path / "glossary.json"))
 
     dlg = SettingsDialog(settings, cache, glossary=glossary)
-    # Set fields programmatically (engine youdao to exercise secret field).
+    # LLM engine = zhipu; Youdao is a separate source with its own fields.
     dlg.engine_box.setCurrentIndex(
         next(i for i in range(dlg.engine_box.count())
-             if dlg.engine_box.itemData(i) == "youdao"))
-    dlg.model_box.setEditText("my-model")
+             if dlg.engine_box.itemData(i) == "zhipu"))
+    dlg.model_box.setEditText("glm-4-flash")
     dlg.base_url_edit.setText("https://example/v1")
     dlg.prompt_edit.setPlainText("custom prompt")
     dlg.concurrency_box.setValue(8)
-    dlg.key_edit.setText("app-key")
-    dlg.secret_edit.setText("app-secret")
-    assert dlg.secret_edit.isEnabled()  # youdao -> secret field on
+    dlg.key_edit.setText("llm-key")
+    dlg.youdao_key_edit.setText("yd-appkey")
+    dlg.secret_edit.setText("yd-secret")
+    dlg.use_llm_chk.setChecked(True)
+    dlg.use_youdao_chk.setChecked(True)
+    # youdao must NOT be one of the LLM engine choices anymore
+    assert all(dlg.engine_box.itemData(i) != "youdao"
+               for i in range(dlg.engine_box.count()))
 
     dlg.save()
 
     s2 = S.Settings.load()
-    assert s2.engine == "youdao"
-    assert s2.model == "my-model"
+    assert s2.engine == "zhipu"
+    assert s2.model == "glm-4-flash"
     assert s2.custom_base_url == "https://example/v1"
     assert s2.prompt == "custom prompt"
     assert s2.concurrency == 8
-    assert s2.get_api_key("youdao") == "app-key"
-    assert s2.get_api_key(YOUDAO_SECRET_KEY) == "app-secret"
+    assert s2.use_llm is True and s2.use_youdao is True
+    assert s2.get_api_key("zhipu") == "llm-key"
+    assert s2.get_api_key("youdao") == "yd-appkey"
+    assert s2.get_api_key(YOUDAO_SECRET_KEY) == "yd-secret"
 
 
 def test_glossary_add_remove(tmp_path, monkeypatch):

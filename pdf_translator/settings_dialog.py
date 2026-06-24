@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (QDialog, QFormLayout, QVBoxLayout, QHBoxLayout,
                                QComboBox, QLineEdit, QPlainTextEdit, QSpinBox,
                                QLabel, QPushButton, QTableWidget, QTableWidgetItem,
-                               QDialogButtonBox, QWidget, QGroupBox)
+                               QDialogButtonBox, QWidget, QGroupBox, QCheckBox)
 from PySide6.QtWidgets import QApplication
 from pdf_translator import themes
 import httpx
@@ -28,16 +28,16 @@ class SettingsDialog(QDialog):
         form = QFormLayout()
         root.addLayout(form)
 
-        # 1. engine / model / custom base_url
+        # 1. LLM engine / model / custom base_url  (有道 is a separate source below)
         self.engine_box = QComboBox()
-        self._engines = engine_labels()
+        self._engines = [(n, l) for n, l in engine_labels() if n != "youdao"]
         for name, label in self._engines:
             self.engine_box.addItem(label, name)
         idx = next((i for i, (n, _) in enumerate(self._engines)
                     if n == settings.engine), 0)
         self.engine_box.setCurrentIndex(idx)
         self.engine_box.currentIndexChanged.connect(self._on_engine_changed)
-        form.addRow("引擎", self.engine_box)
+        form.addRow("大模型引擎", self.engine_box)
 
         model_wrap = QWidget(); model_row = QHBoxLayout(model_wrap)
         model_row.setContentsMargins(0, 0, 0, 0)
@@ -50,26 +50,37 @@ class SettingsDialog(QDialog):
         model_row.addWidget(self.fetch_btn)
         form.addRow("模型版本", model_wrap)
 
-        # translation method: LLM vs Youdao dictionary (faster)
-        self.mode_box = QComboBox()
-        self.mode_box.addItem("大模型翻译（质量高，较慢）", "llm")
-        self.mode_box.addItem("有道词典翻译（快，需配有道）", "youdao")
-        mi = 1 if getattr(settings, "translate_mode", "llm") == "youdao" else 0
-        self.mode_box.setCurrentIndex(mi)
-        form.addRow("翻译方式", self.mode_box)
-
         self.base_url_edit = QLineEdit(settings.custom_base_url)
         self.base_url_edit.setPlaceholderText("仅自定义引擎需要")
         form.addRow("自定义 base_url", self.base_url_edit)
 
-        # 2/3. API key (+ youdao secret)
+        # 大模型 API key
         self.key_edit = QLineEdit(settings.get_api_key(self.current_engine()))
         self.key_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        form.addRow("API Key / appKey", self.key_edit)
+        form.addRow("大模型 API Key", self.key_edit)
+
+        # 有道 (separate source): appKey(应用ID) + appSecret(应用密钥)
+        self.youdao_key_edit = QLineEdit(settings.get_api_key("youdao"))
+        self.youdao_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.youdao_key_edit.setPlaceholderText("有道智云 应用ID")
+        form.addRow("有道 appKey", self.youdao_key_edit)
 
         self.secret_edit = QLineEdit(settings.get_api_key(YOUDAO_SECRET_KEY))
         self.secret_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        form.addRow("App Secret (有道)", self.secret_edit)
+        self.secret_edit.setPlaceholderText("有道智云 应用密钥")
+        form.addRow("有道 App Secret", self.secret_edit)
+
+        # which sources to show (independent on/off)
+        src_wrap = QWidget(); src_row = QHBoxLayout(src_wrap)
+        src_row.setContentsMargins(0, 0, 0, 0)
+        self.use_llm_chk = QCheckBox("使用大模型")
+        self.use_llm_chk.setChecked(getattr(settings, "use_llm", True))
+        self.use_youdao_chk = QCheckBox("使用有道词典")
+        self.use_youdao_chk.setChecked(getattr(settings, "use_youdao", False))
+        src_row.addWidget(self.use_llm_chk)
+        src_row.addWidget(self.use_youdao_chk)
+        src_row.addStretch()
+        form.addRow("翻译来源", src_wrap)
 
         # connection test
         test_wrap = QWidget(); test_row = QHBoxLayout(test_wrap)
@@ -126,7 +137,8 @@ class SettingsDialog(QDialog):
 
     def _on_engine_changed(self, *_):
         name = self.current_engine()
-        self.secret_edit.setEnabled(name == "youdao")
+        # reload the LLM API key stored for the newly selected engine
+        self.key_edit.setText(self.settings.get_api_key(name))
         models = models_for(name)
         self.model_box.blockSignals(True)
         self.model_box.clear()
@@ -303,18 +315,22 @@ class SettingsDialog(QDialog):
         s = self.settings
         s.engine = self.current_engine()
         s.model = self.model_box.currentText().strip()
-        s.translate_mode = self.mode_box.currentData()
         s.custom_base_url = self.base_url_edit.text().strip()
         s.prompt = self.prompt_edit.toPlainText()
         s.concurrency = self.concurrency_box.value()
         s.theme = self.theme_box.currentData()
+        s.use_llm = self.use_llm_chk.isChecked()
+        s.use_youdao = self.use_youdao_chk.isChecked()
 
         key = self.key_edit.text().strip()
         if key:
-            s.set_api_key(s.engine, key)
+            s.set_api_key(s.engine, key)            # 大模型 key under the LLM engine
+        ydk = self.youdao_key_edit.text().strip()
+        if ydk:
+            s.set_api_key("youdao", ydk)            # 有道 appKey
         secret = self.secret_edit.text().strip()
         if secret:
-            s.set_api_key(YOUDAO_SECRET_KEY, secret)
+            s.set_api_key(YOUDAO_SECRET_KEY, secret)  # 有道 appSecret
 
         s.save()
         self._apply_theme()

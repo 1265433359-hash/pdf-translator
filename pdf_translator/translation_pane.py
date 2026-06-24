@@ -81,22 +81,24 @@ class TranslationPane(QScrollArea):
             self._stream_label.setText("")
         self._stream_label.setText(self._stream_label.text() + chunk)
 
-    # --- two-stage: 有道/词典快译 first, 大模型精翻 after -------------------
-    def start_two_stage(self, source_text=""):
+    # --- multi-source: 有道词典 / 大模型, each independently shown -----------
+    def start_sources(self, source_text="", youdao=False, llm=False):
         self.clear()
         if source_text:
             self._lay.addWidget(self._wrap_label("【原文】"))
             s = self._wrap_label(source_text)
             s.setStyleSheet("color: gray;")
             self._lay.addWidget(s)
-        self._lay.addWidget(self._wrap_label("【快速译文 · 有道/词典】"))
-        self._quick_label = self._wrap_label("…")
-        self._lay.addWidget(self._quick_label)
-        self._lay.addWidget(self._wrap_label("【精翻 · 大模型】"))
-        self._stream_label = self._wrap_label("翻译中…")
-        self._lay.addWidget(self._stream_label)
+        if youdao:
+            self._lay.addWidget(self._wrap_label("【有道词典】"))
+            self._quick_label = self._wrap_label("…")
+            self._lay.addWidget(self._quick_label)
+        if llm:
+            self._lay.addWidget(self._wrap_label("【大模型】"))
+            self._stream_label = self._wrap_label("翻译中…")
+            self._lay.addWidget(self._stream_label)
 
-    def set_quick(self, text):
+    def set_youdao(self, text):
         if self._quick_label is not None:
             self._quick_label.setText(text)
 

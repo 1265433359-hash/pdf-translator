@@ -12,7 +12,8 @@ class Settings:
     prompt: str = ""
     concurrency: int = 2  # conservative default; raise in 设置 if your tier allows
     custom_base_url: str = ""
-    translate_mode: str = "llm"  # "llm" (大模型) or "youdao" (有道词典, 更快)
+    use_llm: bool = True       # show 大模型 translation source
+    use_youdao: bool = False   # show 有道词典 translation source (needs appKey/secret)
 
     @classmethod
     def load(cls) -> "Settings":

@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QScrollArea, QLabel
-from PySide6.QtGui import QPixmap, QPainter, QColor
+from PySide6.QtGui import QPixmap, QPainter, QColor, QImage
 from PySide6.QtCore import Qt, Signal, QRect, QEvent
 
 
@@ -34,6 +34,12 @@ class PdfView(QScrollArea):
         img = self._doc.render_page(self.current_index, 1.0)
         avail = self.viewport().width() - 24
         if img.width(): self.set_zoom(avail / img.width())
+
+    def show_fitz_pixmap(self, pix):
+        """Display an externally-rendered fitz.Pixmap (e.g. in-place render)."""
+        img = QImage(pix.samples, pix.width, pix.height,
+                     pix.stride, QImage.Format.Format_RGB888).copy()
+        self._label.setPixmap(QPixmap.fromImage(img))
 
     def _render(self):
         if not self._doc: return

@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QMainWindow, QToolBar, QFileDialog, QSpinBox, QLineEdit,
                                QMessageBox, QDockWidget, QLabel, QSplitter,
-                               QProgressDialog)
+                               QProgressDialog, QComboBox)
 from PySide6.QtGui import QAction, QShortcut, QKeySequence
 from PySide6.QtCore import Qt
 from pdf_translator.pdf_view import PdfView
@@ -46,6 +46,12 @@ class MainWindow(QMainWindow):
         tb.addAction(QAction("翻译整篇", self, triggered=self._translate_whole))
         self.search_box = QLineEdit(); self.search_box.setPlaceholderText("搜索…")
         self.search_box.returnPressed.connect(self._search); tb.addWidget(self.search_box)
+
+        # --- Task 7.1: view-mode toggle (双栏 / 原位替换) ---
+        self.view_mode = QComboBox()
+        self.view_mode.addItems(["视图：双栏", "视图：原位替换"])
+        self.view_mode.currentIndexChanged.connect(self._on_view_mode_changed)
+        tb.addWidget(self.view_mode)
 
         # --- Task 5.5: dictionary, vocabulary & word card ---
         self.dictionary = Dictionary()
@@ -157,6 +163,65 @@ class MainWindow(QMainWindow):
         if dlg is not None:
             dlg.cancel()
         QMessageBox.warning(self, "翻译失败", msg)
+
+    # --- Task 7.1: in-place replacement view ---
+    def _page_block_rects(self, index):
+        """Return [(fitz.Rect, english_text)] for translatable blocks on a page."""
+        import fitz
+        doc = self.view._doc
+        if doc is None:
+            return []
+        out = []
+        for b in doc.page_blocks(index):
+            if b[6] != 0 or not b[4].strip():
+                continue
+            if len(b[4].split()) <= 3:  # skip headers/footers/page numbers
+                continue
+            out.append((fitz.Rect(b[0], b[1], b[2], b[3]), b[4].strip()))
+        return out
+
+    def _on_view_mode_changed(self, index):
+        if index == 1:
+            self._render_inplace_page()
+        else:
+            # restore two-column: re-render the original page in the left view
+            self.pane.show()
+            self.view.goto(self.view.current_index)
+
+    def _render_inplace_page(self):
+        if self.view._doc is None:
+            self.view_mode.setCurrentIndex(0)
+            return
+        blocks = self._page_block_rects(self.view.current_index)
+        if not blocks:
+            return
+        eng = self._current_engine()
+        if eng is None:
+            self.view_mode.setCurrentIndex(0)
+            return
+        rects = [r for r, _ in blocks]
+        texts = [t for _, t in blocks]
+        self._inplace_worker = BatchTranslateWorker(
+            eng, texts, self.cache, self.settings.model,
+            concurrency=self.settings.concurrency)
+        self._inplace_worker.done.connect(
+            lambda zh, rects=rects: self._show_inplace(rects, zh))
+        self._inplace_worker.failed.connect(
+            lambda msg: QMessageBox.warning(self, "翻译失败", msg))
+        self._inplace_worker.start()
+
+    def _show_inplace(self, rects, zh_list):
+        from pdf_translator.inplace_renderer import render_inplace
+        # Work on a throwaway copy of the page so toggling back to 双栏 is clean.
+        import fitz
+        src = self.view._doc._doc
+        tmp = fitz.open()
+        tmp.insert_pdf(src, from_page=self.view.current_index,
+                       to_page=self.view.current_index)
+        page = tmp[0]
+        pix = render_inplace(page, list(zip(rects, zh_list)), zoom=self.view._zoom)
+        self.view.show_fitz_pixmap(pix)
+        self.pane.hide()
 
     # --- Task 4.3 ---
     def _on_selection(self, text, rect):

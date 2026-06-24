@@ -34,7 +34,7 @@ class FloatingResult(QWidget):
         self._anchor = None  # global QRect of the selected text to sit beside
         self.resize(self.MIN_W, self.MIN_H)
 
-    MIN_W, MAX_W = 440, 640
+    MIN_W, MAX_W = 520, 680
     MIN_H, MAX_H = 150, 560
 
     def _autosize(self):

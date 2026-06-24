@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import (QMainWindow, QToolBar, QFileDialog, QSpinBox, QLineEdit,
                                QMessageBox, QDockWidget, QLabel, QSplitter,
-                               QProgressDialog, QComboBox, QToolButton, QMenu)
+                               QProgressDialog, QComboBox, QToolButton, QMenu,
+                               QStackedWidget)
 from PySide6.QtGui import QAction, QShortcut, QKeySequence
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
@@ -18,6 +19,7 @@ from pdf_translator.glossary import Glossary
 from pdf_translator.vocabulary import Vocabulary
 from pdf_translator.word_card import WordCard
 from pdf_translator.translation_pane import TranslationPane
+from pdf_translator.home import HomeWidget
 from pdf_translator.text_preprocessor import paragraphs_from_blocks
 from pdf_translator.translate_queue import estimate_tokens
 
@@ -36,8 +38,17 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.pane)
         self.splitter.setStretchFactor(0, 1)
         self.splitter.setStretchFactor(1, 1)
-        self.setCentralWidget(self.splitter)
+        # home page (launcher) + reader, swapped via a stack
+        self.home = HomeWidget()
+        self.home.open_requested.connect(self._open)
+        self.home.open_path_requested.connect(self._open_path)
+        self.home.clear_requested.connect(self._clear_recents)
+        self.stack = QStackedWidget()
+        self.stack.addWidget(self.home)      # index 0
+        self.stack.addWidget(self.splitter)  # index 1
+        self.setCentralWidget(self.stack)
         tb = QToolBar(); self.addToolBar(tb)
+        tb.addAction(QAction("首页", self, triggered=self._go_home))
         tb.addAction(QAction("打开", self, triggered=self._open))
         # --- recent files ---
         self.recent_btn = QToolButton()
@@ -108,6 +119,10 @@ class MainWindow(QMainWindow):
         if path:
             self._open_path(path)
 
+    def _go_home(self):
+        self._refresh_recents_menu()
+        self.stack.setCurrentIndex(0)
+
     def _open_path(self, path):
         import os
         from pdf_translator import recents
@@ -119,6 +134,7 @@ class MainWindow(QMainWindow):
         doc = PdfDocument.open(path)
         self.view.load(doc)
         self.page_box.setMaximum(doc.page_count)
+        self.stack.setCurrentIndex(1)   # switch to the reader
         self.view.fit_width()  # auto-fit the left pane to the opened article
         recents.add_recent(path)
         self._refresh_recents_menu()
@@ -130,15 +146,18 @@ class MainWindow(QMainWindow):
     def _refresh_recents_menu(self):
         import os
         from pdf_translator import recents
-        self.recent_menu.clear()
         items = recents.all_recents()
+        # home page list
+        self.home.set_recents(items)
+        # toolbar dropdown
+        self.recent_menu.clear()
         if not items:
             act = self.recent_menu.addAction("（暂无最近文件）")
             act.setEnabled(False)
             return
-        for p in items:
-            name = os.path.basename(p)
-            act = self.recent_menu.addAction(name)
+        for it in items:
+            p = it["path"]
+            act = self.recent_menu.addAction(os.path.splitext(os.path.basename(p))[0])
             act.setToolTip(p)
             act.triggered.connect(lambda checked=False, path=p: self._open_path(path))
         self.recent_menu.addSeparator()
@@ -146,8 +165,7 @@ class MainWindow(QMainWindow):
 
     def _clear_recents(self):
         from pdf_translator import recents
-        for p in recents.all_recents(limit=100):
-            recents.remove_recent(p)
+        recents.clear()
         self._refresh_recents_menu()
 
     def _export_vocab(self):

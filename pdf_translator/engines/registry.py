@@ -11,13 +11,12 @@ PRESETS = {
 }
 
 
-def build_engine(name, api_key, model=None, prompt=None, base_url=None):
+def build_engine(name, api_key, model=None, prompt=None, base_url=None, app_secret=None):
     prompt = prompt or DEFAULT_PROMPT
     if name == "youdao":
-        # 有道需 appKey + appSecret：api_key 携带 appKey，base_url 复用为 appSecret
-        if not base_url:
-            raise ValueError("youdao 引擎需 appKey(api_key) 与 appSecret(base_url)")
-        return YoudaoEngine(api_key, base_url)
+        if not app_secret:
+            raise ValueError("youdao 引擎需 appKey(api_key) 与 appSecret(app_secret)")
+        return YoudaoEngine(api_key, app_secret)
     if name == "custom":
         if not base_url or not model:
             raise ValueError("custom 引擎需 base_url 与 model")

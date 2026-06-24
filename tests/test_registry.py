@@ -24,6 +24,6 @@ def test_engine_labels_includes_youdao():
 
 def test_build_youdao_threads_app_secret():
     from pdf_translator.engines.youdao import YoudaoEngine
-    eng = build_engine("youdao", "my-app-key", base_url="my-app-secret")
+    eng = build_engine("youdao", "my-app-key", app_secret="my-app-secret")
     assert isinstance(eng, YoudaoEngine)
     assert eng.app_key == "my-app-key" and eng.app_secret == "my-app-secret"

@@ -40,3 +40,13 @@ def vocab_db() -> Path:
 
 def ecdict_db() -> Path:
     return bundled_data_dir() / "ecdict_lite.db"
+
+
+def app_icon():
+    """QIcon from bundled data/icon.* if present, else None."""
+    for name in ("icon.ico", "icon.png"):
+        p = bundled_data_dir() / name
+        if p.exists():
+            from PySide6.QtGui import QIcon
+            return QIcon(str(p))
+    return None

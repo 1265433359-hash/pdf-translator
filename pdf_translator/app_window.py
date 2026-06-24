@@ -443,14 +443,18 @@ class MainWindow(QMainWindow):
         """Save window state; ask to save annotations if there are unsaved ones."""
         self._save_window_state()
         if getattr(self, "_annot_dirty", False) and self.view._doc is not None:
-            resp = QMessageBox.question(
-                self, "保存标注",
-                "有未保存的标注，要写入 PDF 吗？",
-                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard
-                | QMessageBox.StandardButton.Cancel)
-            if resp == QMessageBox.StandardButton.Cancel:
+            box = QMessageBox(self)
+            box.setWindowTitle("保存标注")
+            box.setIcon(QMessageBox.Icon.Question)
+            box.setText("有未保存的标注，要写入 PDF 吗？")
+            save_btn = box.addButton("保存", QMessageBox.ButtonRole.AcceptRole)
+            box.addButton("不保存", QMessageBox.ButtonRole.DestructiveRole)
+            cancel_btn = box.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+            box.exec()
+            clicked = box.clickedButton()
+            if clicked is cancel_btn:
                 e.ignore(); return
-            if resp == QMessageBox.StandardButton.Save:
+            if clicked is save_btn:
                 try:
                     self.view._doc.save()
                 except Exception as ex:

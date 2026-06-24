@@ -101,3 +101,20 @@ def test_app_window_has_settings_action(tmp_path, monkeypatch):
     w = MainWindow()
     assert hasattr(w, "settings_action")
     assert w.settings_action.text() == "设置"
+
+
+def test_closing_dialog_waits_for_running_worker(tmp_path, monkeypatch):
+    """Closing the dialog mid-request must not destroy a running QThread (crash)."""
+    import time
+    from pdf_translator.workers import CallWorker
+    _setup(tmp_path, monkeypatch)
+    _app()
+    dlg = SettingsDialog(S.Settings.load(),
+                         TranslationCache(db_path=str(tmp_path / "c.db")))
+    w = CallWorker(lambda: (time.sleep(0.3), "ok")[1])
+    dlg._track(w)
+    w.start()
+    time.sleep(0.05)
+    assert w.isRunning()
+    dlg.reject()                 # done() -> _wait_workers() blocks until finished
+    assert not w.isRunning()     # waited, so safe to destroy

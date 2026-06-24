@@ -77,6 +77,22 @@ class WordLookupWorker(QThread):
             self.failed.emit(str(e))
 
 
+class CallWorker(QThread):
+    """Run a zero-arg callable returning str off the GUI thread. Emits ok/failed."""
+    ok = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, fn):
+        super().__init__()
+        self._fn = fn
+
+    def run(self):
+        try:
+            self.ok.emit(self._fn())
+        except Exception as e:
+            self.failed.emit(str(e))
+
+
 class ModelListWorker(QThread):
     """Background model-list fetch. `fetch` is a zero-arg callable returning list[str]."""
     models = Signal(list)

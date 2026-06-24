@@ -7,11 +7,12 @@ DEFAULT_PROMPT = "你是专业学术翻译。把用户给的英文准确译成�
 
 
 class OpenAICompatEngine(Translator):
-    def __init__(self, base_url, api_key, model, prompt=DEFAULT_PROMPT, http=None, glossary=None):
+    def __init__(self, base_url, api_key, model, prompt=DEFAULT_PROMPT, http=None,
+                 glossary=None, timeout=60):
         self.base_url = base_url.rstrip("/"); self.api_key = api_key
         self.model = model; self.prompt = prompt
         self.glossary = glossary
-        self._http = http or httpx.Client(timeout=60)
+        self._http = http or httpx.Client(timeout=timeout)
 
     def _headers(self):
         return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}

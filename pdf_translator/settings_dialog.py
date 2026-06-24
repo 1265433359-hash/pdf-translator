@@ -4,10 +4,11 @@ from PySide6.QtWidgets import (QDialog, QFormLayout, QVBoxLayout, QHBoxLayout,
                                QDialogButtonBox, QWidget, QGroupBox)
 from PySide6.QtWidgets import QApplication
 from pdf_translator import themes
+import httpx
 from pdf_translator.engines.registry import (engine_labels, models_for,
                                              build_engine, fetch_models)
 from pdf_translator.glossary import Glossary
-from pdf_translator.workers import TranslateWorker, ModelListWorker
+from pdf_translator.workers import CallWorker, ModelListWorker
 
 YOUDAO_SECRET_KEY = "youdao_secret"
 
@@ -21,6 +22,7 @@ class SettingsDialog(QDialog):
         self.settings = settings
         self.cache = cache
         self.glossary = glossary or Glossary()
+        self._workers = []  # keep background QThreads alive until they finish
 
         root = QVBoxLayout(self)
         form = QFormLayout()
@@ -190,6 +192,28 @@ class SettingsDialog(QDialog):
         self.cache.clear()
         self._refresh_cache_label()
 
+    # --- worker lifetime ---------------------------------------------------
+    def _track(self, w):
+        """Keep a background QThread referenced and auto-drop it when finished."""
+        self._workers.append(w)
+        w.finished.connect(lambda: self._workers.remove(w) if w in self._workers else None)
+
+    def _wait_workers(self):
+        """Let running background threads finish before this dialog is destroyed.
+
+        Without this, closing the dialog mid-request destroys a running QThread
+        (and its slot targets) -> hard crash. Signals are blocked so late results
+        don't touch the dying dialog. Bounded by the 15s request timeout below.
+        """
+        for w in list(self._workers):
+            if w.isRunning():
+                w.blockSignals(True)
+                w.wait(16000)
+
+    def done(self, r):  # called by both accept() and reject()/close
+        self._wait_workers()
+        super().done(r)
+
     # --- connection test ---------------------------------------------------
     def _test_connection(self):
         """Build the engine from current fields and try one tiny translation."""
@@ -209,10 +233,14 @@ class SettingsDialog(QDialog):
         except Exception as ex:  # missing base_url/secret etc.
             self.test_result.setText(f"✗ 配置错误：{ex}")
             return
+        if hasattr(eng, "_http"):
+            eng._http = httpx.Client(timeout=15)  # bounded so close() won't hang long
         self.test_btn.setEnabled(False)
         self.test_result.setText("测试中…")
-        self._test_worker = TranslateWorker(eng, "Hello, world.", cache=None, model="")
-        self._test_worker.finished_text.connect(self._on_test_ok)
+        # non-streaming single call — lighter and avoids streaming edge cases
+        self._test_worker = CallWorker(lambda: eng.translate("Hello, world."))
+        self._track(self._test_worker)
+        self._test_worker.ok.connect(self._on_test_ok)
         self._test_worker.failed.connect(self._on_test_fail)
         self._test_worker.start()
 
@@ -239,6 +267,7 @@ class SettingsDialog(QDialog):
         self.fetch_btn.setEnabled(False)
         self.test_result.setText("获取模型中…")
         self._model_worker = ModelListWorker(lambda: fetch_models(name, key, base_url))
+        self._track(self._model_worker)
         self._model_worker.models.connect(self._on_models_fetched)
         self._model_worker.failed.connect(self._on_models_failed)
         self._model_worker.start()

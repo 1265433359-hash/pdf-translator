@@ -54,7 +54,7 @@ def fetch_models(name, api_key, base_url=None):
         url = base_url
     else:
         url = PRESETS[name]["base_url"]
-    return OpenAICompatEngine(url, api_key, "x").list_models()
+    return OpenAICompatEngine(url, api_key, "x", timeout=15).list_models()
 
 
 def engine_labels():

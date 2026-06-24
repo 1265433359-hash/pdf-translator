@@ -1,10 +1,12 @@
 from PySide6.QtWidgets import (QScrollArea, QWidget, QVBoxLayout, QHBoxLayout,
                                QLabel, QPushButton)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 
 
 class TranslationPane(QScrollArea):
     """Right column: shows page translation, or a 划词 explanation (word/phrase)."""
+
+    content_changed = Signal()  # emitted whenever shown content changes (for autosize)
 
     def __init__(self):
         super().__init__()
@@ -36,6 +38,7 @@ class TranslationPane(QScrollArea):
         self.clear()
         for p in paras:
             self._lay.addWidget(self._wrap_label(p))
+        self.content_changed.emit()
 
     # --- 划词 explanation -------------------------------------------------
     def show_word(self, entry, on_speak=None, on_add=None):
@@ -61,6 +64,7 @@ class TranslationPane(QScrollArea):
         if entry.examples:
             lines += ["", "例句：" + " / ".join(entry.examples)]
         self._lay.addWidget(self._wrap_label("\n".join(lines)))
+        self.content_changed.emit()
 
     # --- streaming phrase translation ------------------------------------
     def show_translation_start(self, source_text="", title="译文"):
@@ -73,6 +77,7 @@ class TranslationPane(QScrollArea):
         self._lay.addWidget(self._wrap_label(f"【{title}】"))
         self._stream_label = self._wrap_label("翻译中…")
         self._lay.addWidget(self._stream_label)
+        self.content_changed.emit()
 
     def append_translation(self, chunk):
         if self._stream_label is None:
@@ -80,6 +85,7 @@ class TranslationPane(QScrollArea):
         if self._stream_label.text() == "翻译中…":
             self._stream_label.setText("")
         self._stream_label.setText(self._stream_label.text() + chunk)
+        self.content_changed.emit()
 
     # --- multi-source: 有道词典 / 大模型, each independently shown -----------
     def start_sources(self, source_text="", youdao=False, llm=False):
@@ -97,20 +103,24 @@ class TranslationPane(QScrollArea):
             self._lay.addWidget(self._wrap_label("【大模型】"))
             self._stream_label = self._wrap_label("翻译中…")
             self._lay.addWidget(self._stream_label)
+        self.content_changed.emit()
 
     def set_youdao(self, text):
         if self._quick_label is not None:
             self._quick_label.setText(text)
+        self.content_changed.emit()
 
     def main_error(self, msg):
         if self._stream_label is not None:
             self._stream_label.setText("⚠ " + msg)
+            self.content_changed.emit()
         else:
             self.show_error(msg)
 
     def show_error(self, msg):
         self.clear()
         self._lay.addWidget(self._wrap_label("⚠ " + msg))
+        self.content_changed.emit()
 
     def current_text(self):
         """All label text currently shown (for tests / introspection)."""

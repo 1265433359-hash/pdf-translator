@@ -28,8 +28,30 @@ class FloatingResult(QWidget):
         bar.addWidget(close)
         lay.addLayout(bar)
         self.pane = TranslationPane()
+        self.pane.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         lay.addWidget(self.pane)
-        self.resize(440, 340)
+        self.pane.content_changed.connect(self._autosize)
+        self.resize(self.MIN_W, self.MIN_H)
+
+    MIN_W, MAX_W = 280, 560
+    MIN_H, MAX_H = 90, 540
+
+    def _autosize(self):
+        """Resize to fit the content: small for a word, larger for a paragraph,
+        capped (then the pane scrolls)."""
+        host = self.pane.widget()
+        # natural width the content would like (un-wrapped), clamped
+        hint_w = host.sizeHint().width()
+        w = max(self.MIN_W, min(self.MAX_W, hint_w + 44))
+        self.setFixedWidth(w)
+        # height for that constrained width
+        inner_w = w - 44
+        h = host.heightForWidth(inner_w)
+        if h <= 0:
+            h = host.sizeHint().height()
+        total = max(self.MIN_H, min(self.MAX_H, h + 70))
+        self.setMaximumHeight(self.MAX_H)
+        self.resize(w, total)
 
     def show_near(self, global_pos):
         """Show near a global point, kept fully on screen."""

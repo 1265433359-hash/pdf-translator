@@ -49,6 +49,10 @@ class MainWindow(QMainWindow):
         self.search_box = QLineEdit(); self.search_box.setPlaceholderText("搜索…")
         self.search_box.returnPressed.connect(self._search); tb.addWidget(self.search_box)
 
+        # --- Task 10.3: settings dialog ---
+        self.settings_action = QAction("设置", self, triggered=self._open_settings)
+        tb.addAction(self.settings_action)
+
         # --- Task 10.2: export vocabulary to Anki ---
         self.export_vocab_action = QAction("导出生词本", self, triggered=self._export_vocab)
         tb.addAction(self.export_vocab_action)
@@ -267,15 +271,34 @@ class MainWindow(QMainWindow):
     def _on_selection(self, text, rect):
         self._pending = text
 
+    def _open_settings(self):
+        from pdf_translator.settings_dialog import SettingsDialog
+        dlg = SettingsDialog(self.settings, self.cache, parent=self)
+        if dlg.exec():
+            # settings (engine/model/keys/concurrency/prompt) are persisted by the
+            # dialog; next translate calls _current_engine() picks them up fresh.
+            # Sync & re-apply the (possibly changed) theme in our toolbar combo.
+            if self.settings.theme in self._themes:
+                self.theme_box.blockSignals(True)
+                self.theme_box.setCurrentIndex(self._themes.index(self.settings.theme))
+                self.theme_box.blockSignals(False)
+            app = QApplication.instance()
+            if app is not None:
+                themes.apply_theme(app, self.settings.theme)
+
     def _current_engine(self):
         key = self.settings.get_api_key(self.settings.engine)
         if not key:
             QMessageBox.information(self, "需要 API Key",
                 "请先在「设置」中为当前引擎填写 API Key。")
             return None
+        app_secret = None
+        if self.settings.engine == "youdao":
+            app_secret = self.settings.get_api_key("youdao_secret")
         return build_engine(self.settings.engine, key,
                             self.settings.model or None,
-                            base_url=self.settings.custom_base_url or None)
+                            base_url=self.settings.custom_base_url or None,
+                            app_secret=app_secret)
 
     def _translate_pending(self):
         if not getattr(self, "_pending", None): return

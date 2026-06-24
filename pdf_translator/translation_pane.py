@@ -61,8 +61,13 @@ class TranslationPane(QScrollArea):
         self._lay.addWidget(self._wrap_label("\n".join(lines)))
 
     # --- streaming phrase translation ------------------------------------
-    def show_translation_start(self, title="译文"):
+    def show_translation_start(self, source_text="", title="译文"):
         self.clear()
+        if source_text:
+            self._lay.addWidget(self._wrap_label("【原文】"))
+            src = self._wrap_label(source_text)
+            src.setStyleSheet("color: gray;")
+            self._lay.addWidget(src)
         self._lay.addWidget(self._wrap_label(f"【{title}】"))
         self._stream_label = self._wrap_label("翻译中…")
         self._lay.addWidget(self._stream_label)

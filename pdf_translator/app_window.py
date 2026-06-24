@@ -54,8 +54,6 @@ class MainWindow(QMainWindow):
         tb.addAction(QAction("放大", self, triggered=lambda: self.view.set_zoom(self.view._zoom * 1.2)))
         tb.addAction(QAction("缩小", self, triggered=lambda: self.view.set_zoom(self.view._zoom / 1.2)))
         tb.addAction(QAction("适应宽度", self, triggered=self.view.fit_width))
-        tb.addAction(QAction("翻译当前页", self, triggered=self._translate_page))
-        tb.addAction(QAction("翻译整篇", self, triggered=self._translate_whole))
         # --- annotation mode + save ---
         self.annot_mode = QComboBox()
         self.annot_mode.addItems(["划词翻译", "高亮", "删除线"])
@@ -72,12 +70,6 @@ class MainWindow(QMainWindow):
         # --- Task 10.2: export vocabulary to Anki ---
         self.export_vocab_action = QAction("导出生词本", self, triggered=self._export_vocab)
         tb.addAction(self.export_vocab_action)
-
-        # --- Task 7.1: view-mode toggle (双栏 / 原位替换) ---
-        self.view_mode = QComboBox()
-        self.view_mode.addItems(["视图：双栏", "视图：原位替换"])
-        self.view_mode.currentIndexChanged.connect(self._on_view_mode_changed)
-        tb.addWidget(self.view_mode)
 
         # --- Task 9.1: theme switcher ---
         self.theme_box = QComboBox()
@@ -423,7 +415,7 @@ class MainWindow(QMainWindow):
             self._show_word_card(self._pending); return
         eng = self._current_engine()
         if eng is None: return
-        self.pane.show_translation_start("译文")  # 划词解释显示在右栏
+        self.pane.show_translation_start(self._pending, "译文")  # 原文+译文显示在右栏
         self._worker = TranslateWorker(eng, self._pending, self.cache, self.settings.model)
         self._worker.chunk.connect(self.pane.append_translation)
         self._worker.failed.connect(self.pane.show_error)
@@ -438,7 +430,7 @@ class MainWindow(QMainWindow):
             # phrase translation so the app stays useful without a dict.
             eng = self._current_engine()
             if eng is None: return
-            self.pane.show_translation_start(word)
+            self.pane.show_translation_start(word, word)
             self._worker = TranslateWorker(eng, word, self.cache, self.settings.model)
             self._worker.chunk.connect(self.pane.append_translation)
             self._worker.failed.connect(self.pane.show_error)

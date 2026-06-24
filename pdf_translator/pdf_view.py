@@ -20,6 +20,8 @@ class PdfView(QScrollArea):
         self._last_sel_rects = []   # PDF-space (x0,y0,x1,y1) of last selected words
         self._last_sel_page = 0
         self._last_sel_text = ""
+        self._sel_overlay = []      # PDF rects to draw as the current selection shadow
+        self._sel_overlay_page = -1
         self._label.setMouseTracking(True)
         self._label.installEventFilter(self)
 
@@ -53,9 +55,16 @@ class PdfView(QScrollArea):
             self.page_changed.emit(self.current_index)
 
     def wheelEvent(self, e):
-        """Scroll within a tall page; flip pages at the scroll boundaries."""
+        """Ctrl+wheel zooms; otherwise scroll the page and flip at the boundaries."""
         if not self._doc:
             return super().wheelEvent(e)
+        if e.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            dy = e.angleDelta().y()
+            if dy > 0:
+                self.set_zoom(self._zoom * 1.1)
+            elif dy < 0:
+                self.set_zoom(self._zoom / 1.1)
+            e.accept(); return
         bar = self.verticalScrollBar()
         dy = e.angleDelta().y()
         at_top = bar.value() <= bar.minimum()
@@ -95,6 +104,12 @@ class PdfView(QScrollArea):
         for r in self._highlights.get(self.current_index, []):
             p = QPainter(pm); p.fillRect(int(r.x0 * scale), int(r.y0 * scale),
                 int((r.x1 - r.x0) * scale), int((r.y1 - r.y0) * scale), QColor(255, 235, 59, 90)); p.end()
+        # current selection shadow (live feedback while reading)
+        if self._sel_overlay_page == self.current_index:
+            for r in self._sel_overlay:
+                x0, y0, x1, y1 = r
+                p = QPainter(pm); p.fillRect(int(x0 * scale), int(y0 * scale),
+                    int((x1 - x0) * scale), int((y1 - y0) * scale), QColor(51, 102, 204, 70)); p.end()
         pm.setDevicePixelRatio(dpr)  # display at logical size -> sharp on HiDPI
         self._label.setPixmap(pm)
 
@@ -152,6 +167,9 @@ class PdfView(QScrollArea):
                     text, rect = self._collect_selection(self._sel_start, end)
                     self._sel_start = None
                     if text and drag >= 5:  # ignore plain clicks; require a real drag
+                        self._sel_overlay = list(self._last_sel_rects)
+                        self._sel_overlay_page = self._last_sel_page
+                        self._render()  # show the selection shadow immediately
                         self.selection_made.emit(text, rect)
                 return False
             if e.type() == QEvent.Type.ContextMenu:

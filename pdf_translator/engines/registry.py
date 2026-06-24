@@ -1,4 +1,5 @@
 from .openai_compat import OpenAICompatEngine, DEFAULT_PROMPT
+from .youdao import YoudaoEngine
 
 PRESETS = {
     "deepseek": {"label": "DeepSeek", "base_url": "https://api.deepseek.com/v1", "default_model": "deepseek-chat"},
@@ -12,6 +13,11 @@ PRESETS = {
 
 def build_engine(name, api_key, model=None, prompt=None, base_url=None):
     prompt = prompt or DEFAULT_PROMPT
+    if name == "youdao":
+        # 有道需 appKey + appSecret：api_key 携带 appKey，base_url 复用为 appSecret
+        if not base_url:
+            raise ValueError("youdao 引擎需 appKey(api_key) 与 appSecret(base_url)")
+        return YoudaoEngine(api_key, base_url)
     if name == "custom":
         if not base_url or not model:
             raise ValueError("custom 引擎需 base_url 与 model")
@@ -21,4 +27,7 @@ def build_engine(name, api_key, model=None, prompt=None, base_url=None):
 
 
 def engine_labels():
-    return [(k, v["label"]) for k, v in PRESETS.items()] + [("custom", "自定义(OpenAI兼容)")]
+    return [(k, v["label"]) for k, v in PRESETS.items()] + [
+        ("youdao", "有道翻译"),
+        ("custom", "自定义(OpenAI兼容)"),
+    ]

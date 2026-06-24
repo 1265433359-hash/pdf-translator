@@ -16,3 +16,14 @@ def test_build_preset_uses_default_model():
 def test_build_custom_requires_base_url():
     eng = build_engine("custom", "k", model="my-model", base_url="https://my/v1")
     assert eng.base_url == "https://my/v1" and eng.model == "my-model"
+
+
+def test_engine_labels_includes_youdao():
+    assert ("youdao", "有道翻译") in engine_labels()
+
+
+def test_build_youdao_threads_app_secret():
+    from pdf_translator.engines.youdao import YoudaoEngine
+    eng = build_engine("youdao", "my-app-key", base_url="my-app-secret")
+    assert isinstance(eng, YoudaoEngine)
+    assert eng.app_key == "my-app-key" and eng.app_secret == "my-app-secret"

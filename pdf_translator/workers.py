@@ -1,5 +1,7 @@
 from PySide6.QtCore import QThread, Signal
 
+from pdf_translator.translate_queue import translate_batch
+
 
 def stream_translate(engine, text, cache, model, on_chunk):
     if cache:
@@ -25,6 +27,35 @@ class TranslateWorker(QThread):
         try:
             out = stream_translate(self._engine, self._text, self._cache, self._model, self.chunk.emit)
             self.finished_text.emit(out)
+        except Exception as e:
+            self.failed.emit(str(e))
+
+
+class BatchTranslateWorker(QThread):
+    """Translate a list of paragraphs off the GUI thread.
+
+    Progress is marshaled back to the GUI thread via the ``progress`` signal;
+    the final list of translations via ``done``. Never touch widgets from run()."""
+    progress = Signal(int, int)        # (done, total)
+    done = Signal(list)                # list[str] of translations
+    failed = Signal(str)
+
+    def __init__(self, engine, paras, cache=None, model="", concurrency=4):
+        super().__init__()
+        self._engine = engine
+        self._paras = paras
+        self._cache = cache
+        self._model = model
+        self._concurrency = concurrency
+
+    def run(self):
+        try:
+            results = translate_batch(
+                self._engine, self._paras, self._cache, self._model,
+                concurrency=self._concurrency,
+                on_progress=lambda d, t: self.progress.emit(d, t),
+            )
+            self.done.emit(results)
         except Exception as e:
             self.failed.emit(str(e))
 

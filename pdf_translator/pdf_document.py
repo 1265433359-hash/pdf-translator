@@ -26,6 +26,9 @@ class PdfDocument:
     def page_words(self, index: int) -> list[tuple]:
         return self._doc[index].get_text("words")
 
+    def page_blocks(self, index: int) -> list[tuple]:
+        return self._doc[index].get_text("blocks")
+
     def search(self, text: str) -> list[tuple]:
         hits = []
         for i in range(self.page_count):

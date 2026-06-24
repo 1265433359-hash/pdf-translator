@@ -1,17 +1,22 @@
 from PySide6.QtWidgets import (QMainWindow, QToolBar, QFileDialog, QSpinBox, QLineEdit,
-                               QMessageBox, QDockWidget, QLabel)
+                               QMessageBox, QDockWidget, QLabel, QSplitter,
+                               QProgressDialog)
 from PySide6.QtGui import QAction, QShortcut, QKeySequence
 from PySide6.QtCore import Qt
 from pdf_translator.pdf_view import PdfView
 from pdf_translator.pdf_document import PdfDocument
 from pdf_translator.popup import TransPopup
-from pdf_translator.workers import TranslateWorker, WordLookupWorker
+from pdf_translator.workers import (TranslateWorker, WordLookupWorker,
+                                    BatchTranslateWorker)
 from pdf_translator.settings import Settings
 from pdf_translator.cache import TranslationCache
 from pdf_translator.engines.registry import build_engine
 from pdf_translator.dictionary import Dictionary
 from pdf_translator.vocabulary import Vocabulary
 from pdf_translator.word_card import WordCard
+from pdf_translator.translation_pane import TranslationPane
+from pdf_translator.text_preprocessor import paragraphs_from_blocks
+from pdf_translator.translate_queue import estimate_tokens
 
 
 class MainWindow(QMainWindow):
@@ -20,7 +25,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("PDF 双语翻译阅读器"); self.resize(1200, 800)
         self.settings = Settings.load()
         self.cache = TranslationCache()
-        self.view = PdfView(); self.setCentralWidget(self.view)
+        self.view = PdfView()
+        self.pane = TranslationPane()
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.addWidget(self.view)
+        self.splitter.addWidget(self.pane)
+        self.splitter.setStretchFactor(0, 1)
+        self.splitter.setStretchFactor(1, 1)
+        self.setCentralWidget(self.splitter)
         tb = QToolBar(); self.addToolBar(tb)
         tb.addAction(QAction("打开", self, triggered=self._open))
         tb.addAction(QAction("上一页", self, triggered=lambda: self.view.goto(self.view.current_index - 1)))
@@ -30,6 +42,8 @@ class MainWindow(QMainWindow):
         tb.addAction(QAction("放大", self, triggered=lambda: self.view.set_zoom(self.view._zoom * 1.2)))
         tb.addAction(QAction("缩小", self, triggered=lambda: self.view.set_zoom(self.view._zoom / 1.2)))
         tb.addAction(QAction("适应宽度", self, triggered=self.view.fit_width))
+        tb.addAction(QAction("翻译当前页", self, triggered=self._translate_page))
+        tb.addAction(QAction("翻译整篇", self, triggered=self._translate_whole))
         self.search_box = QLineEdit(); self.search_box.setPlaceholderText("搜索…")
         self.search_box.returnPressed.connect(self._search); tb.addWidget(self.search_box)
 
@@ -61,6 +75,88 @@ class MainWindow(QMainWindow):
         if not q or not self.view._doc: return
         hits = self.view._doc.search(q)
         if hits: self.view.highlight(hits[0][0], [r for i, r in hits if i == hits[0][0]])
+
+    # --- Task 6.3: side-by-side page / whole-doc translation ---
+    def _page_paragraphs(self, index):
+        doc = self.view._doc
+        if doc is None:
+            return []
+        return paragraphs_from_blocks(doc.page_blocks(index))
+
+    def _all_paragraphs(self):
+        doc = self.view._doc
+        if doc is None:
+            return []
+        paras = []
+        for i in range(doc.page_count):
+            paras.extend(paragraphs_from_blocks(doc.page_blocks(i)))
+        return paras
+
+    def _translate_page(self):
+        if self.view._doc is None:
+            return
+        paras = self._page_paragraphs(self.view.current_index)
+        if not paras:
+            self.pane.clear()
+            return
+        eng = self._current_engine()
+        if eng is None:
+            return  # dialog already shown by _current_engine
+        self._batch_worker = BatchTranslateWorker(
+            eng, paras, self.cache, self.settings.model,
+            concurrency=self.settings.concurrency)
+        self._batch_worker.done.connect(self.pane.set_paragraphs)
+        self._batch_worker.failed.connect(
+            lambda msg: QMessageBox.warning(self, "翻译失败", msg))
+        self._batch_worker.start()
+
+    def _translate_whole(self):
+        if self.view._doc is None:
+            return
+        paras = self._all_paragraphs()
+        if not paras:
+            self.pane.clear()
+            return
+        eng = self._current_engine()
+        if eng is None:
+            return
+        approx = estimate_tokens(paras)
+        ans = QMessageBox.question(
+            self, "翻译整篇",
+            f"全文约 {len(paras)} 段，预计约 {approx} tokens。是否继续？")
+        if ans != QMessageBox.StandardButton.Yes:
+            return
+        dlg = QProgressDialog("正在翻译整篇…", "取消", 0, len(paras), self)
+        dlg.setWindowModality(Qt.WindowModality.WindowModal)
+        dlg.setAutoClose(True)
+        self._progress_dialog = dlg
+        self._batch_worker = BatchTranslateWorker(
+            eng, paras, self.cache, self.settings.model,
+            concurrency=self.settings.concurrency)
+        # progress is emitted from the worker thread but delivered on the GUI
+        # thread via the queued signal connection below.
+        self._batch_worker.progress.connect(self._on_batch_progress)
+        self._batch_worker.done.connect(self._on_whole_done)
+        self._batch_worker.failed.connect(self._on_batch_failed)
+        self._batch_worker.start()
+        dlg.show()
+
+    def _on_batch_progress(self, done, total):
+        dlg = getattr(self, "_progress_dialog", None)
+        if dlg is not None:
+            dlg.setValue(done)
+
+    def _on_whole_done(self, translated):
+        dlg = getattr(self, "_progress_dialog", None)
+        if dlg is not None:
+            dlg.setValue(dlg.maximum())
+        self.pane.set_paragraphs(translated)
+
+    def _on_batch_failed(self, msg):
+        dlg = getattr(self, "_progress_dialog", None)
+        if dlg is not None:
+            dlg.cancel()
+        QMessageBox.warning(self, "翻译失败", msg)
 
     # --- Task 4.3 ---
     def _on_selection(self, text, rect):

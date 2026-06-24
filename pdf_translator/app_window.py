@@ -488,10 +488,10 @@ class MainWindow(QMainWindow):
         want_llm = self.settings.use_llm
         if not want_youdao and not want_llm:
             self.pane.show_error("未启用任何翻译来源：请在「设置」勾选 大模型 或 有道词典。")
-            self.result.show_near(QCursor.pos())
+            self.result.show_near(self.view.selection_global_rect())
             return
         self.pane.start_sources(text, youdao=want_youdao, llm=want_llm)
-        self.result.show_near(QCursor.pos())
+        self.result.show_near(self.view.selection_global_rect())
         if want_youdao:
             if youdao_unconfigured:
                 self.pane.set_youdao("（有道未配置 appKey/appSecret，请在设置填写）")
@@ -522,7 +522,7 @@ class MainWindow(QMainWindow):
         # Offline dictionary (ECDICT) base info, shown in the floating popup.
         self.pane.show_word(entry, on_speak=self._speak,
                             on_add=lambda e: self.vocab.add(e))
-        self.result.show_near(QCursor.pos())
+        self.result.show_near(self.view.selection_global_rect())
 
         # Enrich collocations/examples via the LLM only if 大模型 is enabled and
         # a key is configured; never pop a dialog from this best-effort path.

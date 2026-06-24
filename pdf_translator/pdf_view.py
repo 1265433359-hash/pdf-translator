@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QScrollArea, QLabel
 from PySide6.QtGui import QPixmap, QPainter, QColor, QImage
-from PySide6.QtCore import Qt, Signal, QRect, QEvent
+from PySide6.QtCore import Qt, Signal, QRect, QEvent, QPoint
 
 
 class PdfView(QScrollArea):
@@ -31,6 +31,21 @@ class PdfView(QScrollArea):
     def last_selection(self):
         """(text, page_index, [pdf_rects]) of the most recent drag-selection."""
         return self._last_sel_text, self._last_sel_page, list(self._last_sel_rects)
+
+    def selection_global_rect(self):
+        """Bounding box of the current selection in global screen coordinates,
+        or None. Used to anchor the result popup beside the selected text."""
+        if not self._last_sel_rects or self._last_sel_page != self.current_index:
+            return None
+        ox, oy = self._pixmap_offset()
+        z = self._zoom
+        x0 = min(r[0] for r in self._last_sel_rects) * z + ox
+        y0 = min(r[1] for r in self._last_sel_rects) * z + oy
+        x1 = max(r[2] for r in self._last_sel_rects) * z + ox
+        y1 = max(r[3] for r in self._last_sel_rects) * z + oy
+        tl = self._label.mapToGlobal(QPoint(int(x0), int(y0)))
+        br = self._label.mapToGlobal(QPoint(int(x1), int(y1)))
+        return QRect(tl, br)
 
     def annotate_selection(self, kind: str) -> bool:
         """Apply a 'highlight'/'strikeout' annotation over the last selection."""

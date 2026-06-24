@@ -4,7 +4,7 @@ Hosts a TranslationPane so it reuses the same multi-source rendering, but floats
 above the page (no layout space) and never steals focus — reading is unaffected.
 """
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QRect
 from PySide6.QtGui import QGuiApplication
 
 from pdf_translator.translation_pane import TranslationPane
@@ -31,10 +31,11 @@ class FloatingResult(QWidget):
         self.pane.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         lay.addWidget(self.pane)
         self.pane.content_changed.connect(self._autosize)
+        self._anchor = None  # global QRect of the selected text to sit beside
         self.resize(self.MIN_W, self.MIN_H)
 
-    MIN_W, MAX_W = 280, 560
-    MIN_H, MAX_H = 90, 540
+    MIN_W, MAX_W = 360, 600
+    MIN_H, MAX_H = 140, 560
 
     def _autosize(self):
         """Resize to fit the content: small for a word, larger for a paragraph,
@@ -56,22 +57,33 @@ class FloatingResult(QWidget):
             self._reposition()
 
     def _reposition(self):
-        """Anchor to the top-right of the main window, always fully on screen."""
+        """Follow the selection but avoid the screen edges (smart placement)."""
         screen = QGuiApplication.primaryScreen().availableGeometry()
-        parent = self.parent()
-        if parent is not None and parent.isVisible():
-            tr = parent.mapToGlobal(parent.rect().topRight())
-            x = tr.x() - self.width() - 16
-            y = tr.y() + 56  # just below the toolbar
-        else:
-            x = screen.right() - self.width() - 16
-            y = screen.top() + 60
-        x = max(screen.left() + 8, min(x, screen.right() - self.width() - 8))
-        y = max(screen.top() + 8, min(y, screen.bottom() - self.height() - 8))
+        w, h = self.width(), self.height()
+        a = self._anchor
+        if a is not None:
+            # prefer below the selection; if it won't fit, place above it
+            x = a.left()
+            if a.bottom() + 8 + h <= screen.bottom():
+                y = a.bottom() + 8
+            elif a.top() - 8 - h >= screen.top():
+                y = a.top() - 8 - h
+            else:  # neither fits cleanly -> clamp below
+                y = a.bottom() + 8
+        else:  # no selection rect -> top-right of the window
+            parent = self.parent()
+            if parent is not None and parent.isVisible():
+                tr = parent.mapToGlobal(parent.rect().topRight())
+                x, y = tr.x() - w - 16, tr.y() + 56
+            else:
+                x, y = screen.right() - w - 16, screen.top() + 60
+        x = max(screen.left() + 8, min(x, screen.right() - w - 8))
+        y = max(screen.top() + 8, min(y, screen.bottom() - h - 8))
         self.move(x, y)
 
-    def show_near(self, global_pos=None):
-        """Show the popup at a fixed, always-visible spot (top-right of the window)."""
+    def show_near(self, anchor_rect=None):
+        """Show the popup beside the selection (anchor_rect, global coords)."""
+        self._anchor = anchor_rect if isinstance(anchor_rect, QRect) else None
         self._reposition()
         self.show()
         self.raise_()

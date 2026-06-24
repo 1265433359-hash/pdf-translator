@@ -414,12 +414,21 @@ class MainWindow(QMainWindow):
         app_secret = None
         if self.settings.engine == "youdao":
             app_secret = self.settings.get_api_key("youdao_secret")
-        return build_engine(self.settings.engine, key,
-                            self.settings.model or None,
-                            prompt=self.settings.prompt or None,
-                            base_url=self.settings.custom_base_url or None,
-                            app_secret=app_secret,
-                            glossary=self.glossary)
+        # Reuse the engine (and its httpx connection pool) across translations
+        # so we don't re-do the TLS handshake every time — major latency win.
+        sig = (self.settings.engine, self.settings.model, key, app_secret,
+               self.settings.custom_base_url, self.settings.prompt)
+        if getattr(self, "_engine_sig", None) == sig and getattr(self, "_engine_cached", None):
+            return self._engine_cached
+        self._engine_cached = build_engine(
+            self.settings.engine, key,
+            self.settings.model or None,
+            prompt=self.settings.prompt or None,
+            base_url=self.settings.custom_base_url or None,
+            app_secret=app_secret,
+            glossary=self.glossary)
+        self._engine_sig = sig
+        return self._engine_cached
 
     def _speak(self, word):
         from pdf_translator import tts

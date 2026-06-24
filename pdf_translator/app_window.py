@@ -109,6 +109,10 @@ class MainWindow(QMainWindow):
         self.word_card.show_entry(entry, self.cursor().pos())
 
         # Enrich collocations/examples asynchronously via the engine (network).
+        # Enrich only if a key is configured; never pop a dialog from the
+        # best-effort enrich path (offline ECDICT-only use must stay silent).
+        if not self.settings.get_api_key(self.settings.engine):
+            return
         eng = self._current_engine()
         if eng is None: return
         self._enrich_worker = WordLookupWorker(eng, word)
@@ -118,7 +122,8 @@ class MainWindow(QMainWindow):
 
     def _merge_word_entry(self, base, enriched):
         # Merge engine-supplied collocations/examples into the displayed entry
-        # and refresh the card (entry may already be dismissed; show_entry is safe).
+        # and refresh the card (entry may already be dismissed).
+        if not self.word_card.isVisible(): return
         if enriched.collocations:
             base.collocations = enriched.collocations
         if enriched.examples:

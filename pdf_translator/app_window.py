@@ -56,6 +56,12 @@ class MainWindow(QMainWindow):
         tb.addAction(QAction("适应宽度", self, triggered=self.view.fit_width))
         tb.addAction(QAction("翻译当前页", self, triggered=self._translate_page))
         tb.addAction(QAction("翻译整篇", self, triggered=self._translate_whole))
+        # --- annotation mode + save ---
+        self.annot_mode = QComboBox()
+        self.annot_mode.addItems(["划词翻译", "高亮", "删除线"])
+        self.annot_mode.setToolTip("拖选文字时执行的动作；右键选区也可随时选高亮/删除线")
+        tb.addWidget(self.annot_mode)
+        tb.addAction(QAction("保存标注", self, triggered=self._save_annotations))
         self.search_box = QLineEdit(); self.search_box.setPlaceholderText("搜索…")
         self.search_box.returnPressed.connect(self._search); tb.addWidget(self.search_box)
 
@@ -95,6 +101,7 @@ class MainWindow(QMainWindow):
         self._dock = None
         self.view.selection_made.connect(self._on_selection)
         self.view.page_changed.connect(self._on_page_changed)
+        self.view.context_requested.connect(self._show_annot_menu)
         sc = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
         sc.activated.connect(self._translate_pending)
 
@@ -338,9 +345,39 @@ class MainWindow(QMainWindow):
 
     # --- Task 4.3 ---
     def _on_selection(self, text, rect):
-        # 划词即译:松开鼠标就直接翻译(不必再按空格;空格仍可作为补充触发)
+        # Drag-select action depends on the toolbar mode.
         self._pending = text
-        self._translate_pending()
+        mode = self.annot_mode.currentText()
+        if mode == "高亮":
+            self.view.annotate_selection("highlight")
+        elif mode == "删除线":
+            self.view.annotate_selection("strikeout")
+        else:  # 划词翻译:松手即译(空格仍可作为补充触发)
+            self._translate_pending()
+
+    def _show_annot_menu(self, global_pos):
+        """Right-click menu on a selection: translate / highlight / strikeout / copy."""
+        text, page, rects = self.view.last_selection()
+        if not rects:
+            return
+        menu = QMenu(self)
+        menu.addAction("翻译", self._translate_pending)
+        menu.addAction("高亮", lambda: self.view.annotate_selection("highlight"))
+        menu.addAction("删除线", lambda: self.view.annotate_selection("strikeout"))
+        menu.addAction("复制", lambda: QApplication.clipboard().setText(text))
+        menu.exec(global_pos)
+
+    def _save_annotations(self):
+        doc = self.view._doc
+        if doc is None:
+            QMessageBox.information(self, "无文件", "请先打开一个 PDF。")
+            return
+        try:
+            doc.save()
+            QMessageBox.information(self, "已保存", "标注已写入 PDF 文件。")
+        except Exception as e:
+            QMessageBox.warning(self, "保存失败",
+                f"无法写入该 PDF：\n{e}\n\n（文件可能被占用或只读）")
 
     def _open_settings(self):
         from pdf_translator.settings_dialog import SettingsDialog
@@ -374,6 +411,10 @@ class MainWindow(QMainWindow):
                             app_secret=app_secret,
                             glossary=self.glossary)
 
+    def _speak(self, word):
+        from pdf_translator import tts
+        tts.speak(word)
+
     def _translate_pending(self):
         if not getattr(self, "_pending", None): return
         if self._worker_busy("_worker"): return  # ignore rapid re-trigger
@@ -382,10 +423,10 @@ class MainWindow(QMainWindow):
             self._show_word_card(self._pending); return
         eng = self._current_engine()
         if eng is None: return
-        self.popup.set_loading(); self.popup.show_at(self.cursor().pos())
+        self.pane.show_translation_start("译文")  # 划词解释显示在右栏
         self._worker = TranslateWorker(eng, self._pending, self.cache, self.settings.model)
-        self._worker.chunk.connect(self.popup.append_chunk)
-        self._worker.failed.connect(self.popup.set_error)
+        self._worker.chunk.connect(self.pane.append_translation)
+        self._worker.failed.connect(self.pane.show_error)
         self._worker.start()
 
     def _show_word_card(self, word):
@@ -394,18 +435,19 @@ class MainWindow(QMainWindow):
         entry = self.dictionary.lookup(word)
         if entry is None:
             # ECDICT not provisioned (or word missing): fall back to the normal
-            # phrase translation popup so the app stays useful without a dict.
+            # phrase translation so the app stays useful without a dict.
             eng = self._current_engine()
             if eng is None: return
-            self.popup.set_loading(); self.popup.show_at(self.cursor().pos())
+            self.pane.show_translation_start(word)
             self._worker = TranslateWorker(eng, word, self.cache, self.settings.model)
-            self._worker.chunk.connect(self.popup.append_chunk)
-            self._worker.failed.connect(self.popup.set_error)
+            self._worker.chunk.connect(self.pane.append_translation)
+            self._worker.failed.connect(self.pane.show_error)
             self._worker.start()
             return
 
-        # Instant base info from ECDICT.
-        self.word_card.show_entry(entry, self.cursor().pos())
+        # Instant base info from ECDICT, shown in the right pane.
+        self.pane.show_word(entry, on_speak=self._speak,
+                            on_add=lambda e: self.vocab.add(e))
 
         # Enrich collocations/examples asynchronously via the engine (network).
         # Enrich only if a key is configured; never pop a dialog from the
@@ -421,13 +463,13 @@ class MainWindow(QMainWindow):
 
     def _merge_word_entry(self, base, enriched):
         # Merge engine-supplied collocations/examples into the displayed entry
-        # and refresh the card (entry may already be dismissed).
-        if not self.word_card.isVisible(): return
+        # and refresh the pane.
         if enriched.collocations:
             base.collocations = enriched.collocations
         if enriched.examples:
             base.examples = enriched.examples
-        self.word_card.show_entry(base, self.word_card.pos())
+        self.pane.show_word(base, on_speak=self._speak,
+                            on_add=lambda e: self.vocab.add(e))
 
     def _on_pin_toggled(self, pinned):
         if pinned:

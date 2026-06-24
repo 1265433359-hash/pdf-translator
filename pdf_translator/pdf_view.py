@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt, Signal, QRect, QEvent
 class PdfView(QScrollArea):
     selection_made = Signal(str, QRect)
     page_changed = Signal(int)  # emitted with the new 0-based page index
+    context_requested = Signal(object)  # right-click global QPoint, for annotate menu
 
     def __init__(self):
         super().__init__()
@@ -16,8 +17,24 @@ class PdfView(QScrollArea):
         self._dpr = 1.0
         self._highlights = {}
         self._sel_start = None
+        self._last_sel_rects = []   # PDF-space (x0,y0,x1,y1) of last selected words
+        self._last_sel_page = 0
+        self._last_sel_text = ""
         self._label.setMouseTracking(True)
         self._label.installEventFilter(self)
+
+    def last_selection(self):
+        """(text, page_index, [pdf_rects]) of the most recent drag-selection."""
+        return self._last_sel_text, self._last_sel_page, list(self._last_sel_rects)
+
+    def annotate_selection(self, kind: str) -> bool:
+        """Apply a 'highlight'/'strikeout' annotation over the last selection."""
+        if not self._doc or not self._last_sel_rects:
+            return False
+        self._doc.annotate(self._last_sel_page, self._last_sel_rects, kind)
+        if self._last_sel_page == self.current_index:
+            self._render()
+        return True
 
     def highlight(self, index, rects):
         self._highlights = {index: rects}; self.goto(index)
@@ -116,6 +133,10 @@ class PdfView(QScrollArea):
         # keep document reading order (block, line, word index)
         words.sort(key=lambda w: (w[5], w[6], w[7]))
         text = " ".join(w[4] for w in words).strip()
+        # remember the selection in PDF space for annotation
+        self._last_sel_page = self.current_index
+        self._last_sel_rects = [tuple(w[:4]) for w in words]
+        self._last_sel_text = text
         return text, QRect(start, end)
 
     def eventFilter(self, obj, e):
@@ -133,4 +154,7 @@ class PdfView(QScrollArea):
                     if text and drag >= 5:  # ignore plain clicks; require a real drag
                         self.selection_made.emit(text, rect)
                 return False
+            if e.type() == QEvent.Type.ContextMenu:
+                self.context_requested.emit(e.globalPos())
+                return True  # we show our own annotate menu
         return super().eventFilter(obj, e)

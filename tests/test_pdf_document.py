@@ -23,3 +23,21 @@ def test_search_finds_hits(sample_pdf):
     d = PdfDocument.open(sample_pdf)
     hits = d.search("test")
     assert len(hits) >= 1 and hits[0][0] == 0
+
+
+def test_annotate_and_save_roundtrip(tmp_path):
+    import fitz
+    from pdf_translator.pdf_document import PdfDocument
+    p = tmp_path / "a.pdf"
+    doc = fitz.open(); page = doc.new_page(); page.insert_text((72, 100), "Hello world")
+    doc.save(str(p)); doc.close()
+
+    d = PdfDocument.open(str(p))
+    w = [x for x in d.page_words(0) if x[4] == "world"][0]
+    d.annotate(0, [w[:4]], "highlight")
+    assert d.annotation_count(0) == 1
+    d.save()           # incremental write-back to the same file
+    d.close()
+
+    d2 = PdfDocument.open(str(p))
+    assert d2.annotation_count(0) == 1   # annotation persisted to disk

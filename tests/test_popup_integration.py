@@ -28,42 +28,31 @@ def _make_empty_ecdict(path):
     conn.close()
 
 
-def test_popup_phrase_pin_and_word_paths(tmp_path):
+def test_phrase_and_word_translation_show_in_pane(tmp_path):
     app = _app()
     w = MainWindow()
 
     fake = FakeEngine(["你好", "，", "世界"])
     w._current_engine = lambda: fake
-    # avoid sqlite cache interfering with the assertion
-    w.cache = None
+    w.cache = None  # avoid sqlite cache interfering with the assertion
     # Provision an empty ECDICT so the single-word path deterministically
-    # misses and falls back to the popup translation (no machine-state dep).
+    # misses and falls back to the pane translation (no machine-state dep).
     db = tmp_path / "ecdict.db"
     _make_empty_ecdict(str(db))
     w.dictionary = Dictionary(str(db))
 
-    # --- phrase path ---
+    # --- phrase path -> right pane ---
     w._pending = "hello world"
     w._translate_pending()
     w._worker.wait(5000)
     app.processEvents()
-    assert w.popup.body.text() == "你好，世界"
+    assert w.pane.stream_text() == "你好，世界"
 
-    # --- pin to dock ---
-    w.popup.pin_btn.setChecked(True)
-    app.processEvents()
-    assert w._dock is not None, "dock not created on pin"
-    assert not w.popup.isVisible(), "popup should hide when pinned"
-    assert w._dock_label.text() == "你好，世界"
-
-    # --- single-word path routes through popup (no crash) ---
-    w.popup.pin_btn.setChecked(False)
-    app.processEvents()
-    w.popup.body.setText("")
+    # --- single-word path (ECDICT miss) falls back to pane translation ---
     fake2 = FakeEngine(["苹果"])
     w._current_engine = lambda: fake2
     w._pending = "apple"
     w._translate_pending()
     w._worker.wait(5000)
     app.processEvents()
-    assert w.popup.body.text() == "苹果"
+    assert w.pane.stream_text() == "苹果"

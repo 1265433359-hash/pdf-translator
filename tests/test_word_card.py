@@ -58,23 +58,21 @@ def test_word_card_found_enrich_and_fallback(tmp_path):
     w._pending = "run"
     w._show_word_card("run")
     app.processEvents()
-    body = w.word_card.body.text()
-    assert "跑" in body, f"meaning missing from card: {body!r}"
+    body = w.pane.current_text()
+    assert "跑" in body, f"meaning missing from pane: {body!r}"
 
     # wait for the async enrich worker, then refresh
     w._enrich_worker.wait(5000)
     app.processEvents()
-    body2 = w.word_card.body.text()
+    body2 = w.pane.current_text()
     assert "run out of" in body2, f"collocation not merged: {body2!r}"
 
-    # --- not-found path: missing word falls back to popup translation ---
-    w.word_card.hide()
-    w.popup.body.setText("")
+    # --- not-found path: missing word falls back to pane translation ---
     w._pending = "zzznotaword"
     w._show_word_card("zzznotaword")
     w._worker.wait(5000)
     app.processEvents()
-    assert w.popup.body.text() == "回退译文"
+    assert w.pane.stream_text() == "回退译文"
 
 
 def test_word_card_no_api_key_skips_enrich_silently(tmp_path):
@@ -98,5 +96,5 @@ def test_word_card_no_api_key_skips_enrich_silently(tmp_path):
     w._show_word_card("run")
     app.processEvents()
 
-    assert "跑" in w.word_card.body.text()
+    assert "跑" in w.pane.current_text()
     assert getattr(w, "_enrich_worker", None) is None

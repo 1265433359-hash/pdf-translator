@@ -41,3 +41,37 @@ class PdfDocument:
             if self._doc[i].get_text("text").strip():
                 return True
         return False
+
+    @property
+    def path(self) -> str:
+        return self._doc.name
+
+    def annotate(self, index: int, rects, kind: str):
+        """Add highlight/strikeout annotations over the given rects on a page.
+
+        rects: iterable of fitz.Rect or (x0,y0,x1,y1) tuples (PDF coordinates).
+        kind: 'highlight' or 'strikeout'.
+        """
+        page = self._doc[index]
+        for r in rects:
+            rect = fitz.Rect(r)
+            if kind == "highlight":
+                page.add_highlight_annot(rect)
+            elif kind == "strikeout":
+                page.add_strikeout_annot(rect)
+            else:
+                raise ValueError(f"unknown annotation kind: {kind}")
+
+    def annotation_count(self, index: int) -> int:
+        return sum(1 for _ in self._doc[index].annots())
+
+    def save(self, path: str = None):
+        """Persist annotations. Default: incremental save back to the original file."""
+        if path is None or path == self.path:
+            self._doc.save(self.path, incremental=True,
+                           encryption=fitz.PDF_ENCRYPT_KEEP)
+        else:
+            self._doc.save(path)
+
+    def close(self):
+        self._doc.close()

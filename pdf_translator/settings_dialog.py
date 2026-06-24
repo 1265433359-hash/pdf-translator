@@ -4,8 +4,9 @@ from PySide6.QtWidgets import (QDialog, QFormLayout, QVBoxLayout, QHBoxLayout,
                                QDialogButtonBox, QWidget, QGroupBox)
 from PySide6.QtWidgets import QApplication
 from pdf_translator import themes
-from pdf_translator.engines.registry import engine_labels
+from pdf_translator.engines.registry import engine_labels, models_for, build_engine
 from pdf_translator.glossary import Glossary
+from pdf_translator.workers import TranslateWorker
 
 YOUDAO_SECRET_KEY = "youdao_secret"
 
@@ -35,8 +36,9 @@ class SettingsDialog(QDialog):
         self.engine_box.currentIndexChanged.connect(self._on_engine_changed)
         form.addRow("引擎", self.engine_box)
 
-        self.model_edit = QLineEdit(settings.model)
-        form.addRow("模型", self.model_edit)
+        self.model_box = QComboBox()
+        self.model_box.setEditable(True)  # pick a known version or type your own
+        form.addRow("模型版本", self.model_box)
 
         self.base_url_edit = QLineEdit(settings.custom_base_url)
         self.base_url_edit.setPlaceholderText("仅自定义引擎需要")
@@ -50,6 +52,17 @@ class SettingsDialog(QDialog):
         self.secret_edit = QLineEdit(settings.get_api_key(YOUDAO_SECRET_KEY))
         self.secret_edit.setEchoMode(QLineEdit.EchoMode.Password)
         form.addRow("App Secret (有道)", self.secret_edit)
+
+        # connection test
+        test_wrap = QWidget(); test_row = QHBoxLayout(test_wrap)
+        test_row.setContentsMargins(0, 0, 0, 0)
+        self.test_btn = QPushButton("测试连接")
+        self.test_btn.clicked.connect(self._test_connection)
+        self.test_result = QLabel("")
+        self.test_result.setWordWrap(True)
+        test_row.addWidget(self.test_btn)
+        test_row.addWidget(self.test_result, 1)
+        form.addRow("验证", test_wrap)
 
         # 4. prompt
         self.prompt_edit = QPlainTextEdit(settings.prompt)
@@ -85,14 +98,23 @@ class SettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
 
-        self._on_engine_changed()  # set secret-field enabled state
+        self._on_engine_changed()  # set secret-field enabled state + model list
+        if settings.model:
+            self.model_box.setEditText(settings.model)  # restore saved model on open
 
     # --- helpers -----------------------------------------------------------
     def current_engine(self) -> str:
         return self.engine_box.currentData()
 
     def _on_engine_changed(self, *_):
-        self.secret_edit.setEnabled(self.current_engine() == "youdao")
+        name = self.current_engine()
+        self.secret_edit.setEnabled(name == "youdao")
+        models = models_for(name)
+        self.model_box.blockSignals(True)
+        self.model_box.clear()
+        self.model_box.addItems(models)
+        self.model_box.setEditText(models[0] if models else "")
+        self.model_box.blockSignals(False)
 
     def _build_glossary_group(self):
         box = QGroupBox("术语表")
@@ -160,12 +182,46 @@ class SettingsDialog(QDialog):
         self.cache.clear()
         self._refresh_cache_label()
 
+    # --- connection test ---------------------------------------------------
+    def _test_connection(self):
+        """Build the engine from current fields and try one tiny translation."""
+        name = self.current_engine()
+        key = self.key_edit.text().strip()
+        if not key:
+            self.test_result.setText("✗ 请先填写 API Key")
+            return
+        try:
+            eng = build_engine(
+                name, key,
+                model=self.model_box.currentText().strip() or None,
+                prompt=None,
+                base_url=self.base_url_edit.text().strip() or None,
+                app_secret=self.secret_edit.text().strip() or None,
+            )
+        except Exception as ex:  # missing base_url/secret etc.
+            self.test_result.setText(f"✗ 配置错误：{ex}")
+            return
+        self.test_btn.setEnabled(False)
+        self.test_result.setText("测试中…")
+        self._test_worker = TranslateWorker(eng, "Hello, world.", cache=None, model="")
+        self._test_worker.finished_text.connect(self._on_test_ok)
+        self._test_worker.failed.connect(self._on_test_fail)
+        self._test_worker.start()
+
+    def _on_test_ok(self, text):
+        self.test_btn.setEnabled(True)
+        self.test_result.setText(f"✓ 连接成功：{text[:40]}")
+
+    def _on_test_fail(self, err):
+        self.test_btn.setEnabled(True)
+        self.test_result.setText(f"✗ 失败：{err[:80]}")
+
     # --- save --------------------------------------------------------------
     def save(self):
         """Persist all dialog fields into settings/keyring. Apply theme."""
         s = self.settings
         s.engine = self.current_engine()
-        s.model = self.model_edit.text().strip()
+        s.model = self.model_box.currentText().strip()
         s.custom_base_url = self.base_url_edit.text().strip()
         s.prompt = self.prompt_edit.toPlainText()
         s.concurrency = self.concurrency_box.value()

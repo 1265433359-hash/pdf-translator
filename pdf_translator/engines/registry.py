@@ -10,6 +10,23 @@ PRESETS = {
     "doubao":   {"label": "豆包", "base_url": "https://ark.cn-beijing.volces.com/api/v3", "default_model": "doubao-pro"},
 }
 
+# 各引擎常见可选模型版本(供设置界面下拉;仍可手动输入其它型号)
+MODELS = {
+    "deepseek": ["deepseek-chat", "deepseek-reasoner"],
+    "zhipu":    ["glm-4-flash", "glm-4-air", "glm-4-plus", "glm-4", "glm-4-long"],
+    "minimax":  ["MiniMax-Text-01", "abab6.5s-chat"],
+    "qwen":     ["qwen-plus", "qwen-turbo", "qwen-max", "qwen-long"],
+    "kimi":     ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+    "doubao":   ["doubao-pro-32k", "doubao-pro-4k", "doubao-lite-32k"],
+    "custom":   [],
+    "youdao":   [],
+}
+
+
+def models_for(name):
+    """Common model versions for an engine (may be empty; field stays editable)."""
+    return MODELS.get(name, [])
+
 
 def build_engine(name, api_key, model=None, prompt=None, base_url=None,
                  app_secret=None, glossary=None):

@@ -86,8 +86,15 @@ class MainWindow(QMainWindow):
         self.popup.pin_toggled.connect(self._on_pin_toggled)
         self._dock = None
         self.view.selection_made.connect(self._on_selection)
+        self.view.page_changed.connect(self._on_page_changed)
         sc = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
         sc.activated.connect(self._translate_pending)
+
+    def _on_page_changed(self, index):
+        """Keep the toolbar page box in sync when the view changes page (wheel/keys)."""
+        self.page_box.blockSignals(True)
+        self.page_box.setValue(index + 1)
+        self.page_box.blockSignals(False)
 
     def _open(self):
         path, _ = QFileDialog.getOpenFileName(self, "打开 PDF", "", "PDF (*.pdf)")

@@ -40,7 +40,7 @@ def test_save_persists_settings_and_keys(tmp_path, monkeypatch):
     dlg.engine_box.setCurrentIndex(
         next(i for i in range(dlg.engine_box.count())
              if dlg.engine_box.itemData(i) == "youdao"))
-    dlg.model_edit.setText("my-model")
+    dlg.model_box.setEditText("my-model")
     dlg.base_url_edit.setText("https://example/v1")
     dlg.prompt_edit.setPlainText("custom prompt")
     dlg.concurrency_box.setValue(8)

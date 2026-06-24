@@ -35,3 +35,11 @@ def test_build_youdao_threads_app_secret():
     eng = build_engine("youdao", "my-app-key", app_secret="my-app-secret")
     assert isinstance(eng, YoudaoEngine)
     assert eng.app_key == "my-app-key" and eng.app_secret == "my-app-secret"
+
+
+def test_models_for_known_and_unknown():
+    from pdf_translator.engines.registry import models_for
+    assert "deepseek-chat" in models_for("deepseek")
+    assert "qwen-plus" in models_for("qwen")
+    assert models_for("custom") == []
+    assert models_for("nonexistent") == []

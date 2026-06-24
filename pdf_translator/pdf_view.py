@@ -5,12 +5,14 @@ from PySide6.QtCore import Qt, Signal, QRect, QEvent
 
 class PdfView(QScrollArea):
     selection_made = Signal(str, QRect)
+    page_changed = Signal(int)  # emitted with the new 0-based page index
 
     def __init__(self):
         super().__init__()
         self._label = QLabel(); self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setWidget(self._label); self.setWidgetResizable(True)
-        self._doc = None; self.current_index = 0; self._zoom = 1.5
+        self._doc = None; self.current_index = 0; self._zoom = 2.0
+        self._dpr = 1.0
         self._highlights = {}
         self._sel_start = None
         self._label.setMouseTracking(True)
@@ -21,10 +23,34 @@ class PdfView(QScrollArea):
 
     def load(self, doc):
         self._doc = doc; self.current_index = 0; self._render()
+        self.page_changed.emit(self.current_index)
 
     def goto(self, index: int):
         if not self._doc: return
-        self.current_index = max(0, min(index, self._doc.page_count - 1)); self._render()
+        new_index = max(0, min(index, self._doc.page_count - 1))
+        changed = new_index != self.current_index
+        self.current_index = new_index
+        self._render()
+        if changed:
+            self.page_changed.emit(self.current_index)
+
+    def wheelEvent(self, e):
+        """Scroll within a tall page; flip pages at the scroll boundaries."""
+        if not self._doc:
+            return super().wheelEvent(e)
+        bar = self.verticalScrollBar()
+        dy = e.angleDelta().y()
+        at_top = bar.value() <= bar.minimum()
+        at_bottom = bar.value() >= bar.maximum()
+        if dy < 0 and at_bottom and self.current_index < self._doc.page_count - 1:
+            self.goto(self.current_index + 1)
+            self.verticalScrollBar().setValue(self.verticalScrollBar().minimum())
+            e.accept(); return
+        if dy > 0 and at_top and self.current_index > 0:
+            self.goto(self.current_index - 1)
+            self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
+            e.accept(); return
+        super().wheelEvent(e)
 
     def set_zoom(self, z: float):
         self._zoom = max(0.3, min(z, 5.0)); self._render()
@@ -43,20 +69,27 @@ class PdfView(QScrollArea):
 
     def _render(self):
         if not self._doc: return
-        img = self._doc.render_page(self.current_index, self._zoom)
-        pm = QPixmap.fromImage(img)
+        dpr = self.devicePixelRatioF() or 1.0
+        self._dpr = dpr
+        scale = self._zoom * dpr  # render at true device pixels for crisp text
+        img = self._doc.render_page(self.current_index, scale)
+        pm = QPixmap.fromImage(img)  # device-pixel canvas
         for r in self._highlights.get(self.current_index, []):
-            p = QPainter(pm); p.fillRect(int(r.x0 * self._zoom), int(r.y0 * self._zoom),
-                int((r.x1 - r.x0) * self._zoom), int((r.y1 - r.y0) * self._zoom), QColor(255, 235, 59, 90)); p.end()
+            p = QPainter(pm); p.fillRect(int(r.x0 * scale), int(r.y0 * scale),
+                int((r.x1 - r.x0) * scale), int((r.y1 - r.y0) * scale), QColor(255, 235, 59, 90)); p.end()
+        pm.setDevicePixelRatio(dpr)  # display at logical size -> sharp on HiDPI
         self._label.setPixmap(pm)
 
     def _pixmap_offset(self):
-        """Top-left of the pixmap within the label (AlignCenter centering margin)."""
+        """Top-left of the pixmap within the label (AlignCenter centering margin), logical px."""
         pm = self._label.pixmap()
         if pm is None or pm.isNull():
             return 0, 0
-        ox = max(0, (self._label.width() - pm.width()) // 2)
-        oy = max(0, (self._label.height() - pm.height()) // 2)
+        dpr = getattr(self, "_dpr", 1.0) or 1.0
+        lw = pm.width() / dpr
+        lh = pm.height() / dpr
+        ox = max(0, (self._label.width() - lw) / 2)
+        oy = max(0, (self._label.height() - lh) / 2)
         return ox, oy
 
     def _to_pdf(self, label_pos):

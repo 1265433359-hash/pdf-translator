@@ -107,7 +107,7 @@ def test_app_window_has_settings_action(tmp_path, monkeypatch):
     from pdf_translator.app_window import MainWindow
     w = MainWindow()
     assert hasattr(w, "settings_action")
-    assert w.settings_action.text() == "设置"
+    assert "设置" in w.settings_action.text()
 
 
 def test_closing_dialog_waits_for_running_worker(tmp_path, monkeypatch):

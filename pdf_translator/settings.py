@@ -8,7 +8,7 @@ SERVICE = "PDFTranslator"
 class Settings:
     engine: str = "deepseek"
     model: str = ""
-    theme: str = "cream"
+    theme: str = "neutral"
     prompt: str = ""
     concurrency: int = 2  # conservative default; raise in 设置 if your tier allows
     custom_base_url: str = ""

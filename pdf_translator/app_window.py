@@ -1,7 +1,8 @@
 from PySide6.QtWidgets import (QMainWindow, QToolBar, QFileDialog, QSpinBox, QLineEdit,
                                QMessageBox, QDockWidget, QLabel, QSplitter,
                                QProgressDialog, QComboBox, QToolButton, QMenu,
-                               QStackedWidget, QTreeWidget, QTreeWidgetItem)
+                               QStackedWidget, QTreeWidget, QTreeWidgetItem, QSizePolicy,
+                               QWidget)
 from PySide6.QtGui import QAction, QShortcut, QKeySequence, QCursor
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
@@ -59,26 +60,35 @@ class MainWindow(QMainWindow):
         self.outline_dock.setWidget(self.outline_tree)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.outline_dock)
         self.outline_dock.hide()
-        tb = QToolBar(); self.addToolBar(tb)
-        tb.addAction(QAction("首页", self, triggered=self._go_home))
-        tb.addAction(QAction("打开", self, triggered=self._open))
-        # --- recent files ---
-        self.recent_btn = QToolButton()
-        self.recent_btn.setText("最近")
-        self.recent_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.recent_menu = QMenu(self.recent_btn)
-        self.recent_btn.setMenu(self.recent_menu)
-        tb.addWidget(self.recent_btn)
-        self._refresh_recents_menu()
-        tb.addAction(QAction("上一页", self, triggered=lambda: self.view.goto(self.view.current_index - 1)))
-        tb.addAction(QAction("下一页", self, triggered=lambda: self.view.goto(self.view.current_index + 1)))
+        # --- left navigation sidebar (primary actions) ---
+        side = QToolBar("导航"); side.setObjectName("sidebar")
+        side.setMovable(False)
+        side.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, side)
+        self.nav_home = QAction("🏠  首页", self, checkable=True, triggered=self._go_home)
+        self.nav_open = QAction("📂  打开", self, triggered=self._open)
+        self.nav_outline = QAction("🔖  目录", self, checkable=True, triggered=self._toggle_outline)
+        self.nav_vocab = QAction("📒  生词本", self, triggered=self._open_vocab)
+        self.settings_action = QAction("⚙  设置", self, triggered=self._open_settings)
+        for a in (self.nav_home, self.nav_open, self.nav_outline, self.nav_vocab):
+            side.addAction(a)
+        spacer = QWidget(); spacer.setSizePolicy(QSizePolicy.Policy.Preferred,
+                                                 QSizePolicy.Policy.Expanding)
+        side.addWidget(spacer)
+        side.addAction(self.settings_action)
+
+        # --- top reading toolbar ---
+        tb = QToolBar("阅读"); tb.setMovable(False); self.addToolBar(tb)
+        tb.addAction(QAction("◀ 上一页", self, triggered=lambda: self.view.goto(self.view.current_index - 1)))
+        tb.addAction(QAction("下一页 ▶", self, triggered=lambda: self.view.goto(self.view.current_index + 1)))
         self.page_box = QSpinBox(); self.page_box.setMinimum(1)
         self.page_box.valueChanged.connect(lambda v: self.view.goto(v - 1)); tb.addWidget(self.page_box)
-        tb.addAction(QAction("放大", self, triggered=lambda: self.view.set_zoom(self.view._zoom * 1.2)))
-        tb.addAction(QAction("缩小", self, triggered=lambda: self.view.set_zoom(self.view._zoom / 1.2)))
+        tb.addSeparator()
+        tb.addAction(QAction("＋ 放大", self, triggered=lambda: self.view.set_zoom(self.view._zoom * 1.2)))
+        tb.addAction(QAction("－ 缩小", self, triggered=lambda: self.view.set_zoom(self.view._zoom / 1.2)))
         tb.addAction(QAction("适应宽度", self, triggered=self.view.fit_width))
-        tb.addAction(QAction("目录", self, triggered=self._toggle_outline))
-        # --- annotation mode + save ---
+        tb.addSeparator()
+        # annotation mode + undo/save
         self.annot_mode = QComboBox()
         self.annot_mode.addItems(["划词翻译", "高亮", "删除线"])
         self.annot_mode.setToolTip("拖选文字时执行的动作；右键选区也可随时选高亮/删除线")
@@ -86,26 +96,14 @@ class MainWindow(QMainWindow):
         tb.addAction(QAction("撤销标注", self, triggered=self._undo_annotation))
         tb.addAction(QAction("保存标注", self, triggered=self._save_annotations))
         self._annot_dirty = False
-        self.search_box = QLineEdit(); self.search_box.setPlaceholderText("搜索…")
+        spacer2 = QWidget(); spacer2.setSizePolicy(QSizePolicy.Policy.Expanding,
+                                                   QSizePolicy.Policy.Preferred)
+        tb.addWidget(spacer2)
+        self.search_box = QLineEdit(); self.search_box.setPlaceholderText("在文档中搜索…")
+        self.search_box.setMaximumWidth(220)
         self.search_box.returnPressed.connect(self._search); tb.addWidget(self.search_box)
-
-        # --- Task 10.3: settings dialog ---
-        self.settings_action = QAction("设置", self, triggered=self._open_settings)
-        tb.addAction(self.settings_action)
-
-        # --- vocabulary book (browse/search/delete/export) ---
-        self.vocab_action = QAction("生词本", self, triggered=self._open_vocab)
-        tb.addAction(self.vocab_action)
-
-        # --- Task 9.1: theme switcher ---
-        self.theme_box = QComboBox()
         self._themes = themes.available_themes()
-        for name in self._themes:
-            self.theme_box.addItem(f"主题：{name}", name)
-        if self.settings.theme in self._themes:
-            self.theme_box.setCurrentIndex(self._themes.index(self.settings.theme))
-        self.theme_box.currentIndexChanged.connect(self._on_theme_changed)
-        tb.addWidget(self.theme_box)
+        self._refresh_recents_menu()
 
         # --- Task 5.5: dictionary, vocabulary & word card ---
         self.dictionary = Dictionary()
@@ -122,6 +120,7 @@ class MainWindow(QMainWindow):
         self.view.context_requested.connect(self._show_annot_menu)
         sc = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
         sc.activated.connect(self._translate_pending)
+        self.nav_home.setChecked(True)  # start on the home page
 
     def _on_page_changed(self, index):
         """Keep the toolbar page box in sync; remember the reading position."""
@@ -140,6 +139,7 @@ class MainWindow(QMainWindow):
     def _go_home(self):
         self._refresh_recents_menu()
         self.stack.setCurrentIndex(0)
+        self.nav_home.setChecked(True)
 
     def _open_path(self, path):
         import os
@@ -154,6 +154,7 @@ class MainWindow(QMainWindow):
         self.view.load(doc)
         self.page_box.setMaximum(doc.page_count)
         self.stack.setCurrentIndex(1)   # switch to the reader
+        self.nav_home.setChecked(False)
         self.view.fit_width()  # auto-fit the left pane to the opened article
         self._current_path = path
         self._populate_outline(doc.get_toc())
@@ -167,24 +168,9 @@ class MainWindow(QMainWindow):
                 "此 PDF 没有可提取的文字（疑似扫描件），暂不支持翻译。OCR 将在后续版本支持。")
 
     def _refresh_recents_menu(self):
-        import os
+        """Recents now live on the home page (sidebar 首页)."""
         from pdf_translator import recents
-        items = recents.all_recents()
-        # home page list
-        self.home.set_recents(items)
-        # toolbar dropdown
-        self.recent_menu.clear()
-        if not items:
-            act = self.recent_menu.addAction("（暂无最近文件）")
-            act.setEnabled(False)
-            return
-        for it in items:
-            p = it["path"]
-            act = self.recent_menu.addAction(os.path.splitext(os.path.basename(p))[0])
-            act.setToolTip(p)
-            act.triggered.connect(lambda checked=False, path=p: self._open_path(path))
-        self.recent_menu.addSeparator()
-        self.recent_menu.addAction("清空最近记录", self._clear_recents)
+        self.home.set_recents(recents.all_recents())
 
     def _clear_recents(self):
         from pdf_translator import recents
@@ -328,17 +314,6 @@ class MainWindow(QMainWindow):
             self.pane.show()
             self.view.goto(self.view.current_index)
 
-    # --- Task 9.1: theme switching ---
-    def _on_theme_changed(self, index):
-        name = self.theme_box.itemData(index)
-        if not name:
-            return
-        app = QApplication.instance()
-        if app is not None:
-            themes.apply_theme(app, name)
-        self.settings.theme = name
-        self.settings.save()
-
     def _render_inplace_page(self):
         if self.view._doc is None:
             self.view_mode.setCurrentIndex(0)
@@ -426,6 +401,7 @@ class MainWindow(QMainWindow):
         self.outline_tree.clear()
         if not toc:
             self.outline_dock.hide()
+            self.nav_outline.setChecked(False)
             return
         stack = []  # (level, item)
         for level, title, page in toc:
@@ -440,6 +416,7 @@ class MainWindow(QMainWindow):
             stack.append((level, item))
         self.outline_tree.expandToDepth(0)
         self.outline_dock.show()  # auto-reveal when the PDF has bookmarks
+        self.nav_outline.setChecked(True)
 
     def _on_outline_clicked(self, item, _col):
         page = item.data(0, Qt.ItemDataRole.UserRole)
@@ -447,7 +424,9 @@ class MainWindow(QMainWindow):
             self.view.goto(int(page) - 1)  # TOC pages are 1-based
 
     def _toggle_outline(self):
-        self.outline_dock.setVisible(not self.outline_dock.isVisible())
+        vis = not self.outline_dock.isVisible()
+        self.outline_dock.setVisible(vis)
+        self.nav_outline.setChecked(vis)
 
     def _open_vocab(self):
         from pdf_translator.vocab_dialog import VocabularyDialog
@@ -484,13 +463,8 @@ class MainWindow(QMainWindow):
         dlg = SettingsDialog(self.settings, self.cache,
                              glossary=self.glossary, parent=self)
         if dlg.exec():
-            # settings (engine/model/keys/concurrency/prompt) are persisted by the
-            # dialog; next translate calls _current_engine() picks them up fresh.
-            # Sync & re-apply the (possibly changed) theme in our toolbar combo.
-            if self.settings.theme in self._themes:
-                self.theme_box.blockSignals(True)
-                self.theme_box.setCurrentIndex(self._themes.index(self.settings.theme))
-                self.theme_box.blockSignals(False)
+            # settings (engine/model/keys/concurrency/prompt/theme) are persisted by
+            # the dialog; re-apply the possibly-changed theme.
             app = QApplication.instance()
             if app is not None:
                 themes.apply_theme(app, self.settings.theme)

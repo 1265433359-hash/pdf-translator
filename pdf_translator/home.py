@@ -4,8 +4,10 @@ import time
 from datetime import datetime
 
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                               QFrame, QPushButton, QScrollArea, QSizePolicy)
+                               QFrame, QPushButton, QScrollArea, QSizePolicy,
+                               QGraphicsDropShadowEffect)
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 
 
 def format_ts(ts):
@@ -59,6 +61,10 @@ class HomeWidget(QWidget):
         oc.addWidget(title)
         oc.addStretch()
         open_card.clicked.connect(self.open_requested.emit)
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(28); shadow.setOffset(0, 6)
+        shadow.setColor(QColor(0, 0, 0, 38))
+        open_card.setGraphicsEffect(shadow)
         col.addWidget(open_card)
 
         # 最近 header
@@ -89,17 +95,7 @@ class HomeWidget(QWidget):
         outer.addStretch()
         outer.addWidget(center, 3)
         outer.addStretch()
-
-        self.setStyleSheet("""
-            #openCard { background: palette(base); border: 1px solid palette(mid);
-                        border-radius: 12px; }
-            #openTitle { font-size: 18px; font-weight: 600; }
-            #recentTitle { font-size: 22px; font-weight: 700; }
-            #recentRow { background: transparent; border-radius: 8px; }
-            #recentRow:hover { background: palette(alternate-base); }
-            #recentName { font-size: 14px; }
-            #recentDate { color: gray; }
-        """)
+        # visual styling comes from the active theme QSS (#openCard, #recentRow, ...)
 
     def set_recents(self, items):
         # clear

@@ -14,6 +14,7 @@ from pdf_translator.settings import Settings
 from pdf_translator.cache import TranslationCache
 from pdf_translator.engines.registry import build_engine
 from pdf_translator.dictionary import Dictionary
+from pdf_translator.glossary import Glossary
 from pdf_translator.vocabulary import Vocabulary
 from pdf_translator.word_card import WordCard
 from pdf_translator.translation_pane import TranslationPane
@@ -27,6 +28,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("PDF 双语翻译阅读器"); self.resize(1200, 800)
         self.settings = Settings.load()
         self.cache = TranslationCache()
+        self.glossary = Glossary()
         self.view = PdfView()
         self.pane = TranslationPane()
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -131,9 +133,16 @@ class MainWindow(QMainWindow):
             paras.extend(paragraphs_from_blocks(doc.page_blocks(i)))
         return paras
 
+    def _worker_busy(self, attr):
+        """True if the named worker exists and is still running."""
+        w = getattr(self, attr, None)
+        return w is not None and w.isRunning()
+
     def _translate_page(self):
         if self.view._doc is None:
             return
+        if self._worker_busy("_batch_worker"):
+            return  # ignore re-trigger while a batch is in flight
         paras = self._page_paragraphs(self.view.current_index)
         if not paras:
             self.pane.clear()
@@ -152,6 +161,8 @@ class MainWindow(QMainWindow):
     def _translate_whole(self):
         if self.view._doc is None:
             return
+        if self._worker_busy("_batch_worker"):
+            return  # ignore re-trigger while a batch is in flight
         paras = self._all_paragraphs()
         if not paras:
             self.pane.clear()
@@ -165,6 +176,9 @@ class MainWindow(QMainWindow):
             f"全文约 {len(paras)} 段，预计约 {approx} tokens。是否继续？")
         if ans != QMessageBox.StandardButton.Yes:
             return
+        # NOTE: the "取消" button is cosmetic — it dismisses the dialog but does
+        # NOT interrupt the running thread pool (a real cancel flag is out of
+        # scope here). The worker finishes its batch regardless.
         dlg = QProgressDialog("正在翻译整篇…", "取消", 0, len(paras), self)
         dlg.setWindowModality(Qt.WindowModality.WindowModal)
         dlg.setAutoClose(True)
@@ -236,6 +250,8 @@ class MainWindow(QMainWindow):
         if self.view._doc is None:
             self.view_mode.setCurrentIndex(0)
             return
+        if self._worker_busy("_inplace_worker"):
+            return  # ignore re-trigger while an in-place render is in flight
         blocks = self._page_block_rects(self.view.current_index)
         if not blocks:
             return
@@ -273,7 +289,8 @@ class MainWindow(QMainWindow):
 
     def _open_settings(self):
         from pdf_translator.settings_dialog import SettingsDialog
-        dlg = SettingsDialog(self.settings, self.cache, parent=self)
+        dlg = SettingsDialog(self.settings, self.cache,
+                             glossary=self.glossary, parent=self)
         if dlg.exec():
             # settings (engine/model/keys/concurrency/prompt) are persisted by the
             # dialog; next translate calls _current_engine() picks them up fresh.
@@ -297,11 +314,14 @@ class MainWindow(QMainWindow):
             app_secret = self.settings.get_api_key("youdao_secret")
         return build_engine(self.settings.engine, key,
                             self.settings.model or None,
+                            prompt=self.settings.prompt or None,
                             base_url=self.settings.custom_base_url or None,
-                            app_secret=app_secret)
+                            app_secret=app_secret,
+                            glossary=self.glossary)
 
     def _translate_pending(self):
         if not getattr(self, "_pending", None): return
+        if self._worker_busy("_worker"): return  # ignore rapid re-trigger
         from pdf_translator.textutil import is_single_word
         if is_single_word(self._pending):
             self._show_word_card(self._pending); return

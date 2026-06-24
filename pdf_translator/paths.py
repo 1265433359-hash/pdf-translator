@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 APP = "PDFTranslator"
@@ -19,7 +20,10 @@ def data_local_dir() -> Path:
 
 
 def bundled_data_dir() -> Path:
-    return Path(__file__).resolve().parent.parent / "data"
+    # Under PyInstaller the bundle root is exposed as sys._MEIPASS; in a normal
+    # run that attribute is absent so we fall back to the repo layout.
+    base = getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent)
+    return Path(base) / "data"
 
 
 def config_file() -> Path:

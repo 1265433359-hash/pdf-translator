@@ -1,5 +1,5 @@
 import json, keyring
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, fields
 from pdf_translator import paths
 
 SERVICE = "PDFTranslator"
@@ -17,7 +17,10 @@ class Settings:
     def load(cls) -> "Settings":
         p = paths.config_file()
         if p.exists():
-            return cls(**{**asdict(cls()), **json.loads(p.read_text(encoding="utf-8"))})
+            known = {f.name for f in fields(cls)}
+            loaded = {k: v for k, v in json.loads(p.read_text(encoding="utf-8")).items()
+                      if k in known}
+            return cls(**{**asdict(cls()), **loaded})
         return cls()
 
     def save(self):

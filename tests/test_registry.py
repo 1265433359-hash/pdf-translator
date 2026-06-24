@@ -22,6 +22,14 @@ def test_engine_labels_includes_youdao():
     assert ("youdao", "有道翻译") in engine_labels()
 
 
+def test_build_preset_threads_glossary():
+    from pdf_translator.glossary import Glossary
+    g = Glossary.__new__(Glossary)  # bypass file load
+    g._d = {}
+    eng = build_engine("deepseek", "k", glossary=g)
+    assert eng.glossary is g
+
+
 def test_build_youdao_threads_app_secret():
     from pdf_translator.engines.youdao import YoudaoEngine
     eng = build_engine("youdao", "my-app-key", app_secret="my-app-secret")

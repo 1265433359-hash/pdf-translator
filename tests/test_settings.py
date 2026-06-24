@@ -7,6 +7,18 @@ class MemKeyring(FailKeyring):
     def set_password(self, s, u, p): MemKeyring.store[(s,u)] = p
     def get_password(self, s, u): return MemKeyring.store.get((s,u))
 
+def test_load_ignores_unknown_json_keys(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    cfg = S.paths.config_file()
+    cfg.write_text(json.dumps({"engine": "qwen", "totally_unknown_key": 123}),
+                   encoding="utf-8")
+    s = S.Settings.load()  # must not raise on the unknown key
+    assert s.engine == "qwen"
+    assert not hasattr(s, "totally_unknown_key")
+
+
 def test_roundtrip_config(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))

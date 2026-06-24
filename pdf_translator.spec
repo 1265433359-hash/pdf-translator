@@ -3,8 +3,6 @@
 # Build with:  pyinstaller --noconfirm pdf_translator.spec
 # Produces a windowed (no console) app at dist/PDFTranslator/.
 
-block_cipher = None
-
 # Bundle the data directory (QSS themes + ECDICT offline dictionary).
 # Resolved at runtime via pdf_translator.paths.bundled_data_dir(), which
 # expects the data/ folder to sit next to the pdf_translator package inside
@@ -32,11 +30,10 @@ a = Analysis(
     excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure, a.zipped_data)
 
 exe = EXE(
     pyz,

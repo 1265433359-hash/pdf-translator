@@ -14,4 +14,11 @@ def load_qss(name) -> str:
 
 
 def apply_theme(app, name):
-    app.setStyleSheet(load_qss(name))
+    # Never raise on a stale/missing theme: fall back to "cream", then to an
+    # empty stylesheet, so a bad settings.theme can't crash startup.
+    for candidate in (name, "cream"):
+        qss = _dir() / f"{candidate}.qss"
+        if qss.exists():
+            app.setStyleSheet(qss.read_text(encoding="utf-8"))
+            return
+    app.setStyleSheet("")

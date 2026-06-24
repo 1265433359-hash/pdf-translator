@@ -11,7 +11,8 @@ PRESETS = {
 }
 
 
-def build_engine(name, api_key, model=None, prompt=None, base_url=None, app_secret=None):
+def build_engine(name, api_key, model=None, prompt=None, base_url=None,
+                 app_secret=None, glossary=None):
     prompt = prompt or DEFAULT_PROMPT
     if name == "youdao":
         if not app_secret:
@@ -20,9 +21,10 @@ def build_engine(name, api_key, model=None, prompt=None, base_url=None, app_secr
     if name == "custom":
         if not base_url or not model:
             raise ValueError("custom 引擎需 base_url 与 model")
-        return OpenAICompatEngine(base_url, api_key, model, prompt)
+        return OpenAICompatEngine(base_url, api_key, model, prompt, glossary=glossary)
     cfg = PRESETS[name]
-    return OpenAICompatEngine(cfg["base_url"], api_key, model or cfg["default_model"], prompt)
+    return OpenAICompatEngine(cfg["base_url"], api_key, model or cfg["default_model"],
+                             prompt, glossary=glossary)
 
 
 def engine_labels():

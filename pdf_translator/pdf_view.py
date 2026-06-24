@@ -10,6 +10,7 @@ class PdfView(QScrollArea):
     def __init__(self):
         super().__init__()
         self._label = QLabel(); self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._label.setCursor(Qt.CursorShape.IBeamCursor)  # text-selection feedback (杠)
         self.setWidget(self._label); self.setWidgetResizable(True)
         self._doc = None; self.current_index = 0; self._zoom = 2.0
         self._dpr = 1.0

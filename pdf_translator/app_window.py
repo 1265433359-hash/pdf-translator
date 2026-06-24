@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QMainWindow, QToolBar, QFileDialog, QSpinBox, QLineEdit,
                                QMessageBox, QDockWidget, QLabel, QSplitter,
-                               QProgressDialog, QComboBox)
+                               QProgressDialog, QComboBox, QToolButton, QMenu)
 from PySide6.QtGui import QAction, QShortcut, QKeySequence
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
@@ -39,6 +39,14 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.splitter)
         tb = QToolBar(); self.addToolBar(tb)
         tb.addAction(QAction("打开", self, triggered=self._open))
+        # --- recent files ---
+        self.recent_btn = QToolButton()
+        self.recent_btn.setText("最近")
+        self.recent_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.recent_menu = QMenu(self.recent_btn)
+        self.recent_btn.setMenu(self.recent_menu)
+        tb.addWidget(self.recent_btn)
+        self._refresh_recents_menu()
         tb.addAction(QAction("上一页", self, triggered=lambda: self.view.goto(self.view.current_index - 1)))
         tb.addAction(QAction("下一页", self, triggered=lambda: self.view.goto(self.view.current_index + 1)))
         self.page_box = QSpinBox(); self.page_box.setMinimum(1)
@@ -99,11 +107,49 @@ class MainWindow(QMainWindow):
     def _open(self):
         path, _ = QFileDialog.getOpenFileName(self, "打开 PDF", "", "PDF (*.pdf)")
         if path:
-            doc = PdfDocument.open(path)
-            self.view.load(doc); self.page_box.setMaximum(doc.page_count)
-            if not doc.has_text_layer():
-                QMessageBox.warning(self, "无法翻译",
-                    "此 PDF 没有可提取的文字（疑似扫描件），暂不支持翻译。OCR 将在后续版本支持。")
+            self._open_path(path)
+
+    def _open_path(self, path):
+        import os
+        from pdf_translator import recents
+        if not os.path.exists(path):
+            QMessageBox.warning(self, "文件不存在", f"找不到文件：\n{path}")
+            recents.remove_recent(path)
+            self._refresh_recents_menu()
+            return
+        doc = PdfDocument.open(path)
+        self.view.load(doc)
+        self.page_box.setMaximum(doc.page_count)
+        self.view.fit_width()  # auto-fit the left pane to the opened article
+        recents.add_recent(path)
+        self._refresh_recents_menu()
+        self.setWindowTitle(f"{os.path.basename(path)} — PDF 双语翻译阅读器")
+        if not doc.has_text_layer():
+            QMessageBox.warning(self, "无法翻译",
+                "此 PDF 没有可提取的文字（疑似扫描件），暂不支持翻译。OCR 将在后续版本支持。")
+
+    def _refresh_recents_menu(self):
+        import os
+        from pdf_translator import recents
+        self.recent_menu.clear()
+        items = recents.all_recents()
+        if not items:
+            act = self.recent_menu.addAction("（暂无最近文件）")
+            act.setEnabled(False)
+            return
+        for p in items:
+            name = os.path.basename(p)
+            act = self.recent_menu.addAction(name)
+            act.setToolTip(p)
+            act.triggered.connect(lambda checked=False, path=p: self._open_path(path))
+        self.recent_menu.addSeparator()
+        self.recent_menu.addAction("清空最近记录", self._clear_recents)
+
+    def _clear_recents(self):
+        from pdf_translator import recents
+        for p in recents.all_recents(limit=100):
+            recents.remove_recent(p)
+        self._refresh_recents_menu()
 
     def _export_vocab(self):
         from pdf_translator.anki_export import export_csv

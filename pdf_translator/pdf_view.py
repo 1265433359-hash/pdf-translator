@@ -215,7 +215,8 @@ class PdfView(QScrollArea):
         i1 = self._nearest_word_index(ex, ey, words)
         lo, hi = sorted((i0, i1))
         sel = words[lo:hi + 1]
-        text = " ".join(w[4] for w in sel).strip()
+        from pdf_translator.textutil import strip_edge_punct
+        text = strip_edge_punct(" ".join(w[4] for w in sel))
         self._last_sel_page = self.current_index
         self._last_sel_rects = [tuple(w[:4]) for w in sel]
         self._last_sel_text = text

@@ -59,8 +59,13 @@ QGroupBox { background: #ffffff; border: 1px solid #e7e9eb; border-radius: 12px;
             margin-top: 12px; padding: 10px; }
 QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; color: #868b91; }
 QScrollArea { background: transparent; border: none; }
-QDockWidget { titlebar-close-icon: none; color: #868b91; }
-QDockWidget::title { background: #eef0f2; padding: 8px 12px; border-bottom: 1px solid #e7e9eb; }
+QDockWidget { color: #2a2d31; }
+QDockWidget::title { background: #eef0f2; padding: 8px 28px 8px 12px;
+    border-bottom: 1px solid #e7e9eb; }
+QDockWidget::close-button, QDockWidget::float-button { background: #c7cfda;
+    border: none; border-radius: 5px; padding: 2px; top: 6px; right: 6px; }
+QDockWidget::close-button:hover { background: #51647d; }
+QDockWidget::float-button { subcontrol-position: top right; right: 28px; }
 QTreeWidget { background: #ffffff; border: none; outline: none; }
 QTreeWidget::item { padding: 5px 4px; border-radius: 6px; }
 QTreeWidget::item:hover { background: #dce1e8; }

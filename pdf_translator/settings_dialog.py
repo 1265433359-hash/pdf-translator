@@ -25,8 +25,13 @@ class SettingsDialog(QDialog):
         self._workers = []  # keep background QThreads alive until they finish
 
         root = QVBoxLayout(self)
-        form = QFormLayout()
-        root.addLayout(form)
+        cols = QHBoxLayout()
+        cols.setSpacing(24)
+        root.addLayout(cols)
+        form = QFormLayout()       # left column
+        right_col = QVBoxLayout()  # right column
+        cols.addLayout(form, 1)
+        cols.addLayout(right_col, 1)
 
         # 1. LLM engine / model / custom base_url  (有道 is a separate source below)
         self.engine_box = QComboBox()
@@ -93,12 +98,6 @@ class SettingsDialog(QDialog):
         test_row.addWidget(self.test_result, 1)
         form.addRow("验证", test_wrap)
 
-        # 4. prompt
-        self.prompt_edit = QPlainTextEdit(settings.prompt)
-        self.prompt_edit.setPlaceholderText("留空使用引擎默认提示词")
-        self.prompt_edit.setMaximumHeight(90)
-        form.addRow("提示词", self.prompt_edit)
-
         # 5. concurrency
         self.concurrency_box = QSpinBox()
         self.concurrency_box.setRange(1, 16)
@@ -114,10 +113,17 @@ class SettingsDialog(QDialog):
             self.theme_box.setCurrentIndex(self._themes.index(settings.theme))
         form.addRow("主题", self.theme_box)
 
-        # 7. glossary
-        root.addWidget(self._build_glossary_group())
+        # --- right column: prompt + glossary ---
+        right_form = QFormLayout()
+        self.prompt_edit = QPlainTextEdit(settings.prompt)
+        self.prompt_edit.setPlaceholderText("留空使用引擎默认提示词")
+        self.prompt_edit.setMaximumHeight(90)
+        right_form.addRow("提示词", self.prompt_edit)
+        right_col.addLayout(right_form)
+        right_col.addWidget(self._build_glossary_group())
+        right_col.addStretch()
 
-        # 8. cache
+        # 8. cache (full width, below the two columns)
         root.addWidget(self._build_cache_group())
 
         buttons = QDialogButtonBox(
@@ -126,6 +132,7 @@ class SettingsDialog(QDialog):
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
+        self.resize(880, 540)  # wide & short so the buttons are always reachable
 
         self._on_engine_changed()  # set secret-field enabled state + model list
         if settings.model:

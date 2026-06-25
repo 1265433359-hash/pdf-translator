@@ -53,7 +53,7 @@ class TranslationPane(QScrollArea):
         header.addWidget(phon)
         header.addStretch()
         if on_speak:
-            b = QPushButton("🔊"); b.setFixedWidth(36)
+            b = QPushButton("🔊"); b.setFixedWidth(36); b.setToolTip("播放")
             b.clicked.connect(lambda: on_speak(entry.word)); header.addWidget(b)
         if is_saved:
             added = QPushButton("✓ 已加入生词本"); added.setEnabled(False)

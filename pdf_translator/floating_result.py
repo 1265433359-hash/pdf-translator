@@ -21,9 +21,11 @@ class FloatingResult(QWidget):
         bar = QHBoxLayout()
         bar.addWidget(QLabel("划词翻译"))
         bar.addStretch()
-        close = QPushButton("×")
-        close.setFixedSize(22, 22)
+        close = QPushButton("✕")
+        close.setFixedSize(26, 26)
         close.setToolTip("关闭 (Esc)")
+        close.setStyleSheet(
+            "QPushButton{font-size:15px;font-weight:700;border-radius:13px;}")
         close.clicked.connect(self.hide)
         bar.addWidget(close)
         lay.addLayout(bar)

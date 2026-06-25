@@ -64,8 +64,13 @@ QGroupBox {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 1
             margin-top: 12px; padding: 10px; }}
 QGroupBox::title {{ subcontrol-origin: margin; left: 12px; padding: 0 4px; color: {MUTED}; }}
 QScrollArea {{ background: transparent; border: none; }}
-QDockWidget {{ titlebar-close-icon: none; color: {MUTED}; }}
-QDockWidget::title {{ background: {TOOLBAR}; padding: 8px 12px; border-bottom: 1px solid {BORDER}; }}
+QDockWidget {{ color: {TEXT}; }}
+QDockWidget::title {{ background: {TOOLBAR}; padding: 8px 28px 8px 12px;
+    border-bottom: 1px solid {BORDER}; }}
+QDockWidget::close-button, QDockWidget::float-button {{ background: {SEL};
+    border: none; border-radius: 5px; padding: 2px; top: 6px; right: 6px; }}
+QDockWidget::close-button:hover {{ background: {ACCENT}; }}
+QDockWidget::float-button {{ subcontrol-position: top right; right: 28px; }}
 QTreeWidget {{ background: {SURFACE}; border: none; outline: none; }}
 QTreeWidget::item {{ padding: 5px 4px; border-radius: 6px; }}
 QTreeWidget::item:hover {{ background: {HOVER}; }}

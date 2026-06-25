@@ -16,7 +16,20 @@ def _install_zh(app):
         app.installTranslator(tr)
 
 
+def _set_windows_app_id():
+    """Give Windows a distinct AppUserModelID so the taskbar uses OUR window icon
+    instead of pythonw.exe's. Must run before any window is created."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "pdftranslator.reader")
+        except Exception:
+            pass
+
+
 def main():
+    _set_windows_app_id()
     app = QApplication(sys.argv)
     app.setApplicationName("PDF 双语翻译阅读器")
     _install_zh(app)
@@ -26,6 +39,8 @@ def main():
     settings = Settings.load()
     themes.apply_theme(app, settings.theme)
     win = MainWindow()
+    if icon is not None:
+        win.setWindowIcon(icon)
     win.show()
     sys.exit(app.exec())
 

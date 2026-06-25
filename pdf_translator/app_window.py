@@ -85,9 +85,10 @@ class MainWindow(QMainWindow):
         tb.addWidget(self.prev_btn)
         self._page_count = 0
         page_wrap = QWidget(); page_wrap.setObjectName("pageBox")
-        ph = QHBoxLayout(page_wrap); ph.setContentsMargins(4, 2, 4, 2); ph.setSpacing(1)
+        page_wrap.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        ph = QHBoxLayout(page_wrap); ph.setContentsMargins(8, 2, 8, 2); ph.setSpacing(2)
         self.page_edit = QLineEdit("1"); self.page_edit.setObjectName("pageInner")
-        self.page_edit.setFixedWidth(18)
+        self.page_edit.setFixedWidth(20)
         self.page_edit.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.page_edit.returnPressed.connect(self._jump_to_typed_page)
         self.page_total = QLabel("/ 0"); self.page_total.setObjectName("pageInner")

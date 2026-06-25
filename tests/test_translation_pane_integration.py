@@ -47,7 +47,7 @@ def test_translate_current_page_offscreen(tmp_path):
 
     doc = PdfDocument.open(_multi_para_pdf(tmp_path))
     w.view.load(doc)
-    w.page_box.setMaximum(doc.page_count)
+    w._page_count = doc.page_count
 
     # Inject a fake engine (no network).
     w._current_engine = lambda: FakeEngine()

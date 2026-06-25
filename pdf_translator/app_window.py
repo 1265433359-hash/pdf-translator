@@ -83,9 +83,13 @@ class MainWindow(QMainWindow):
         self.prev_btn.setToolTip("上一页")
         self.prev_btn.clicked.connect(lambda: self.view.goto(self.view.current_index - 1))
         tb.addWidget(self.prev_btn)
-        self.page_box = QSpinBox(); self.page_box.setMinimum(1)
-        self.page_box.valueChanged.connect(lambda v: self.view.goto(v - 1)); tb.addWidget(self.page_box)
-        self.page_total = QLabel(" / 0")
+        self._page_count = 0
+        self.page_edit = QLineEdit("1")
+        self.page_edit.setFixedWidth(40)
+        self.page_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.page_edit.returnPressed.connect(self._jump_to_typed_page)
+        tb.addWidget(self.page_edit)
+        self.page_total = QLabel("/ 0")
         tb.addWidget(self.page_total)
         self.next_btn = QToolButton(); self.next_btn.setText("▶")
         self.next_btn.setToolTip("下一页")
@@ -131,11 +135,18 @@ class MainWindow(QMainWindow):
         sc.activated.connect(self._translate_pending)
         self.nav_home.setChecked(True)  # start on the home page
 
+    def _jump_to_typed_page(self):
+        try:
+            n = int(self.page_edit.text())
+        except ValueError:
+            self.page_edit.setText(str(self.view.current_index + 1)); return
+        n = max(1, min(n, self._page_count or 1))
+        self.view.goto(n - 1)
+        self.page_edit.setText(str(n))
+
     def _on_page_changed(self, index):
         """Keep the toolbar page box in sync; remember the reading position."""
-        self.page_box.blockSignals(True)
-        self.page_box.setValue(index + 1)
-        self.page_box.blockSignals(False)
+        self.page_edit.setText(str(index + 1))
         if self._current_path:
             from pdf_translator import recents
             recents.set_page(self._current_path, index)
@@ -161,8 +172,8 @@ class MainWindow(QMainWindow):
         saved_page = recents.page_for(path)   # before add_recent
         doc = PdfDocument.open(path)
         self.view.load(doc)
-        self.page_box.setMaximum(doc.page_count)
-        self.page_total.setText(f" / {doc.page_count}")
+        self._page_count = doc.page_count
+        self.page_total.setText(f"/ {doc.page_count}")
         self.stack.setCurrentIndex(1)   # switch to the reader
         self.nav_home.setChecked(False)
         self.view.fit_width()  # auto-fit the left pane to the opened article

@@ -47,6 +47,12 @@ QComboBox QAbstractItemView {{ background: {SURFACE}; color: {TEXT};
     selection-background-color: {HOVER}; selection-color: {TEXT}; padding: 4px; }}
 QSpinBox::up-button, QSpinBox::down-button {{ width: 16px; border: none; background: {HOVER}; }}
 
+/* combined page indicator: looks like one box "7 / 10" */
+#pageBox {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 8px; }}
+#pageBox:hover {{ border: 1px solid {ACCENT}; }}
+#pageInner {{ border: none; background: transparent; padding: 0; color: {TEXT}; }}
+#pageInner:focus {{ border: none; background: transparent; }}
+
 QMenu {{ background: {SURFACE}; color: {TEXT}; border: 1px solid {BORDER};
          border-radius: 10px; padding: 6px; }}
 QMenu::item {{ padding: 6px 22px 6px 14px; border-radius: 6px; }}

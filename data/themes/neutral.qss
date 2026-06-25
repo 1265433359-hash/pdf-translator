@@ -42,6 +42,12 @@ QComboBox QAbstractItemView { background: #ffffff; color: #2a2d31;
     selection-background-color: #dce1e8; selection-color: #2a2d31; padding: 4px; }
 QSpinBox::up-button, QSpinBox::down-button { width: 16px; border: none; background: #dce1e8; }
 
+/* combined page indicator: looks like one box "7 / 10" */
+#pageBox { background: #ffffff; border: 1px solid #e7e9eb; border-radius: 8px; }
+#pageBox:hover { border: 1px solid #51647d; }
+#pageInner { border: none; background: transparent; padding: 0; color: #2a2d31; }
+#pageInner:focus { border: none; background: transparent; }
+
 QMenu { background: #ffffff; color: #2a2d31; border: 1px solid #e7e9eb;
          border-radius: 10px; padding: 6px; }
 QMenu::item { padding: 6px 22px 6px 14px; border-radius: 6px; }

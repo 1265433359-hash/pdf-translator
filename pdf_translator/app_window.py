@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (QMainWindow, QToolBar, QFileDialog, QSpinBox, QLi
                                QMessageBox, QDockWidget, QLabel, QSplitter,
                                QProgressDialog, QComboBox, QToolButton, QMenu,
                                QStackedWidget, QTreeWidget, QTreeWidgetItem, QSizePolicy,
-                               QWidget)
+                               QWidget, QHBoxLayout)
 from PySide6.QtGui import QAction, QShortcut, QKeySequence, QCursor
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
@@ -84,13 +84,16 @@ class MainWindow(QMainWindow):
         self.prev_btn.clicked.connect(lambda: self.view.goto(self.view.current_index - 1))
         tb.addWidget(self.prev_btn)
         self._page_count = 0
-        self.page_edit = QLineEdit("1")
-        self.page_edit.setFixedWidth(40)
-        self.page_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        page_wrap = QWidget(); page_wrap.setObjectName("pageBox")
+        ph = QHBoxLayout(page_wrap); ph.setContentsMargins(10, 2, 10, 2); ph.setSpacing(3)
+        self.page_edit = QLineEdit("1"); self.page_edit.setObjectName("pageInner")
+        self.page_edit.setFixedWidth(26)
+        self.page_edit.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.page_edit.returnPressed.connect(self._jump_to_typed_page)
-        tb.addWidget(self.page_edit)
-        self.page_total = QLabel("/ 0")
-        tb.addWidget(self.page_total)
+        self.page_total = QLabel("/ 0"); self.page_total.setObjectName("pageInner")
+        ph.addWidget(self.page_edit)
+        ph.addWidget(self.page_total)
+        tb.addWidget(page_wrap)
         self.next_btn = QToolButton(); self.next_btn.setText("▶")
         self.next_btn.setToolTip("下一页")
         self.next_btn.clicked.connect(lambda: self.view.goto(self.view.current_index + 1))

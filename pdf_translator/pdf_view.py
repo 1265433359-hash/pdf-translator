@@ -16,7 +16,6 @@ class PdfView(QScrollArea):
         self.setWidget(self._label); self.setWidgetResizable(True)
         self._doc = None; self.current_index = 0; self._zoom = 2.0
         self._dpr = 1.0
-        self._highlights = {}
         self._sel_start = None
         self._last_sel_rects = []   # PDF-space (x0,y0,x1,y1) of last selected words
         self._last_sel_page = 0
@@ -73,22 +72,6 @@ class PdfView(QScrollArea):
 
     def has_unsaved_annotations(self) -> bool:
         return bool(self._annot_stack)
-
-    def highlight(self, index, rects):
-        self._highlights = {index: rects}; self.goto(index)
-
-    def set_highlights(self, hits):
-        """Highlight all search matches. hits = list of (page_index, fitz.Rect).
-        Current page's matches show immediately; no page jump."""
-        d = {}
-        for page, rect in hits:
-            d.setdefault(page, []).append(rect)
-        self._highlights = d
-        self._render()
-
-    def clear_highlights(self):
-        self._highlights = {}
-        self._render()
 
     def load(self, doc):
         self._doc = doc; self.current_index = 0; self._render()
@@ -151,9 +134,6 @@ class PdfView(QScrollArea):
         self._scale = scale
         img = self._doc.render_page(self.current_index, scale)
         pm = QPixmap.fromImage(img)  # device-pixel canvas
-        for r in self._highlights.get(self.current_index, []):
-            p = QPainter(pm); p.fillRect(int(r.x0 * scale), int(r.y0 * scale),
-                int((r.x1 - r.x0) * scale), int((r.y1 - r.y0) * scale), QColor(255, 235, 59, 90)); p.end()
         self._base_pm = pm  # base without the live selection; selection drawn on a copy
         self._paint_overlay()
 

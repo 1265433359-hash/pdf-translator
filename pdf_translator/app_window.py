@@ -118,6 +118,7 @@ class MainWindow(QMainWindow):
         self.view.selection_made.connect(self._on_selection)
         self.view.page_changed.connect(self._on_page_changed)
         self.view.context_requested.connect(self._show_annot_menu)
+        self.view.cleared.connect(self.result.hide)  # click elsewhere -> close popup
         sc = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
         sc.activated.connect(self._translate_pending)
         self.nav_home.setChecked(True)  # start on the home page

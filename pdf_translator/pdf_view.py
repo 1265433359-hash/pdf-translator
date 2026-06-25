@@ -7,6 +7,7 @@ class PdfView(QScrollArea):
     selection_made = Signal(str, QRect)
     page_changed = Signal(int)  # emitted with the new 0-based page index
     context_requested = Signal(object)  # right-click global QPoint, for annotate menu
+    cleared = Signal()  # a plain click in the page -> dismiss popup + selection
 
     def __init__(self):
         super().__init__()
@@ -226,6 +227,13 @@ class PdfView(QScrollArea):
         if obj is self._label and getattr(self, "_doc", None) is not None:
             if e.type() == QEvent.Type.MouseButtonPress and e.button() == Qt.MouseButton.LeftButton:
                 self._sel_start = e.position().toPoint()
+                # clear the previous selection shadow and dismiss the popup; a new
+                # drag rebuilds the shadow, a plain click just dismisses
+                if self._sel_overlay:
+                    self._sel_overlay = []
+                    self._sel_overlay_page = -1
+                    self._paint_overlay()
+                self.cleared.emit()
                 return False
             if e.type() == QEvent.Type.MouseMove and self._sel_start is not None:
                 # live selection: update the shadow as the mouse drags (no re-render)

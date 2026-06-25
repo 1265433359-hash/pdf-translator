@@ -41,8 +41,10 @@ class TranslationPane(QScrollArea):
         self.content_changed.emit()
 
     # --- 划词 explanation -------------------------------------------------
-    def show_word(self, entry, on_speak=None, on_add=None):
-        """Display a dictionary entry (word, phonetic, meanings, collocations, examples)."""
+    def show_word(self, entry, on_speak=None, on_add=None, on_forgot=None,
+                  is_saved=False, forgot_count=0):
+        """Dictionary entry + vocab controls. When already saved, the add button
+        becomes a disabled '✓ 已加入生词本' and a '不记得 (N)' button appears."""
         self.clear()
         header = QHBoxLayout()
         title = QLabel(f"<b>{entry.word}</b>")
@@ -53,8 +55,16 @@ class TranslationPane(QScrollArea):
         if on_speak:
             b = QPushButton("🔊"); b.setFixedWidth(36)
             b.clicked.connect(lambda: on_speak(entry.word)); header.addWidget(b)
-        if on_add:
-            b = QPushButton("➕生词本")
+        if is_saved:
+            added = QPushButton("✓ 已加入生词本"); added.setEnabled(False)
+            header.addWidget(added)
+            if on_forgot:
+                fb = QPushButton(f"不记得 ({forgot_count})")
+                fb.setToolTip("点一下,后台记一次没记住,用于按遗忘度排序复习")
+                fb.clicked.connect(lambda: on_forgot(entry.word))
+                header.addWidget(fb)
+        elif on_add:
+            b = QPushButton("➕ 生词本")
             b.clicked.connect(lambda: on_add(entry)); header.addWidget(b)
         self._lay.addLayout(header)
 

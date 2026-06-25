@@ -1,6 +1,6 @@
 """In-app vocabulary book: browse / search / delete / speak / export saved words."""
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QLabel,
-                               QTableWidget, QTableWidgetItem, QPushButton,
+                               QTableWidget, QTableWidgetItem, QPushButton, QComboBox,
                                QHeaderView, QAbstractItemView, QFileDialog, QMessageBox)
 from PySide6.QtCore import Qt
 
@@ -18,17 +18,23 @@ class VocabularyDialog(QDialog):
         self.search = QLineEdit()
         self.search.setPlaceholderText("搜索单词 / 释义…")
         self.search.textChanged.connect(self._reload)
+        self.sort_box = QComboBox()
+        self.sort_box.addItem("按遗忘度", "forgot")   # default
+        self.sort_box.addItem("按首字母", "alpha")
+        self.sort_box.addItem("按收录时间", "time")
+        self.sort_box.currentIndexChanged.connect(self._reload)
         self.count_label = QLabel("")
         top.addWidget(self.search, 1)
+        top.addWidget(QLabel("排序"))
+        top.addWidget(self.sort_box)
         top.addWidget(self.count_label)
         root.addLayout(top)
 
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["单词", "音标", "释义", "来源"])
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(["单词", "音标", "释义", "遗忘", "来源"])
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSortingEnabled(True)
         root.addWidget(self.table)
 
         bar = QHBoxLayout()
@@ -51,19 +57,19 @@ class VocabularyDialog(QDialog):
 
     def _reload(self, *_):
         q = self.search.text().strip().lower()
-        rows = self.vocab.all()
+        rows = self.vocab.all(sort=self.sort_box.currentData())
         if q:
             rows = [r for r in rows
                     if q in r["word"].lower()
                     or any(q in m.lower() for m in r["meanings"])]
-        self.table.setSortingEnabled(False)
+        self.table.setSortingEnabled(False)   # keep our sql ordering
         self.table.setRowCount(len(rows))
         for i, r in enumerate(rows):
             self.table.setItem(i, 0, QTableWidgetItem(r["word"]))
             self.table.setItem(i, 1, QTableWidgetItem(r.get("phonetic", "")))
             self.table.setItem(i, 2, QTableWidgetItem(" ".join(r["meanings"])))
-            self.table.setItem(i, 3, QTableWidgetItem(r.get("source", "")))
-        self.table.setSortingEnabled(True)
+            self.table.setItem(i, 3, QTableWidgetItem(str(r.get("forgot", 0))))
+            self.table.setItem(i, 4, QTableWidgetItem(r.get("source", "")))
         self.count_label.setText(f"共 {self.vocab.count()} 个")
 
     def _selected_words(self):

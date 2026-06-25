@@ -559,8 +559,7 @@ class MainWindow(QMainWindow):
             return
 
         # Offline dictionary (ECDICT) base info, shown in the floating popup.
-        self.pane.show_word(entry, on_speak=self._speak,
-                            on_add=lambda e: self.vocab.add(e))
+        self._render_word_card(entry)
         self.result.show_near(self.view.selection_global_rect())
 
         # Enrich collocations/examples via the LLM only if 大模型 is enabled and
@@ -576,15 +575,25 @@ class MainWindow(QMainWindow):
             lambda enriched, base=entry: self._merge_word_entry(base, enriched))
         self._enrich_worker.start()
 
+    def _render_word_card(self, entry):
+        """(Re)render the word card with current vocab state (saved / forgot count)."""
+        saved = self.vocab.is_saved(entry.word)
+        forgot = self.vocab.forgot_count(entry.word) if saved else 0
+        self.pane.show_word(
+            entry, on_speak=self._speak,
+            on_add=lambda e: (self.vocab.add(e), self._render_word_card(e)),
+            on_forgot=lambda w, e=entry: (self.vocab.increment_forgot(w),
+                                          self._render_word_card(e)),
+            is_saved=saved, forgot_count=forgot)
+
     def _merge_word_entry(self, base, enriched):
         # Merge engine-supplied collocations/examples into the displayed entry
-        # and refresh the pane.
+        # and refresh the card (preserving saved/forgot state).
         if enriched.collocations:
             base.collocations = enriched.collocations
         if enriched.examples:
             base.examples = enriched.examples
-        self.pane.show_word(base, on_speak=self._speak,
-                            on_add=lambda e: self.vocab.add(e))
+        self._render_word_card(base)
 
     def _on_pin_toggled(self, pinned):
         if pinned:

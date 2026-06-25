@@ -1,13 +1,27 @@
-_engine = None
-
-
-def _default():
-    global _engine
-    if _engine is None:
-        import pyttsx3; _engine = pyttsx3.init()
-    return _engine
+import threading
 
 
 def speak(word: str, engine=None):
-    eng = engine or _default()
-    eng.say(word); eng.runAndWait()
+    """Speak a word. Injected engine -> call directly (tests). Otherwise create a
+    FRESH pyttsx3 engine on a background thread.
+
+    Why fresh每次: reusing one pyttsx3 engine across calls makes the 2nd
+    runAndWait() silently do nothing on Windows SAPI5. A new engine per call
+    avoids that; the thread keeps the GUI responsive.
+    """
+    if engine is not None:
+        engine.say(word)
+        engine.runAndWait()
+        return
+
+    def _run():
+        try:
+            import pyttsx3
+            eng = pyttsx3.init()
+            eng.say(word)
+            eng.runAndWait()
+            eng.stop()
+        except Exception:
+            pass
+
+    threading.Thread(target=_run, daemon=True).start()

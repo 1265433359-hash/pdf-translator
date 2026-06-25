@@ -18,6 +18,10 @@ def speak(word: str, engine=None):
         try:
             import pyttsx3
             eng = pyttsx3.init()
+            try:
+                eng.setProperty("volume", 1.0)  # max software volume
+            except Exception:
+                pass
             eng.say(word)
             eng.runAndWait()
             eng.stop()

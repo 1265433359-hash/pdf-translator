@@ -83,6 +83,8 @@ class MainWindow(QMainWindow):
         tb.addAction(QAction("下一页 ▶", self, triggered=lambda: self.view.goto(self.view.current_index + 1)))
         self.page_box = QSpinBox(); self.page_box.setMinimum(1)
         self.page_box.valueChanged.connect(lambda v: self.view.goto(v - 1)); tb.addWidget(self.page_box)
+        self.page_total = QLabel(" / 0")
+        tb.addWidget(self.page_total)
         tb.addSeparator()
         tb.addAction(QAction("＋ 放大", self, triggered=lambda: self.view.set_zoom(self.view._zoom * 1.2)))
         tb.addAction(QAction("－ 缩小", self, triggered=lambda: self.view.set_zoom(self.view._zoom / 1.2)))
@@ -154,6 +156,7 @@ class MainWindow(QMainWindow):
         doc = PdfDocument.open(path)
         self.view.load(doc)
         self.page_box.setMaximum(doc.page_count)
+        self.page_total.setText(f" / {doc.page_count}")
         self.stack.setCurrentIndex(1)   # switch to the reader
         self.nav_home.setChecked(False)
         self.view.fit_width()  # auto-fit the left pane to the opened article

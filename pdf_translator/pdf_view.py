@@ -77,6 +77,19 @@ class PdfView(QScrollArea):
     def highlight(self, index, rects):
         self._highlights = {index: rects}; self.goto(index)
 
+    def set_highlights(self, hits):
+        """Highlight all search matches. hits = list of (page_index, fitz.Rect).
+        Current page's matches show immediately; no page jump."""
+        d = {}
+        for page, rect in hits:
+            d.setdefault(page, []).append(rect)
+        self._highlights = d
+        self._render()
+
+    def clear_highlights(self):
+        self._highlights = {}
+        self._render()
+
     def load(self, doc):
         self._doc = doc; self.current_index = 0; self._render()
         self.page_changed.emit(self.current_index)

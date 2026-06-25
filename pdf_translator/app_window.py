@@ -117,9 +117,21 @@ class MainWindow(QMainWindow):
                                                    QSizePolicy.Policy.Preferred)
         spacer2.setStyleSheet("background: transparent;")
         tb.addWidget(spacer2)
+        self.search_prev = QToolButton(); self.search_prev.setText("◀")
+        self.search_prev.setToolTip("上一个匹配")
+        self.search_prev.clicked.connect(lambda: self._search_goto(self._search_idx - 1))
+        tb.addWidget(self.search_prev)
         self.search_box = QLineEdit(); self.search_box.setPlaceholderText("在文档中搜索…")
-        self.search_box.setMaximumWidth(220)
-        self.search_box.returnPressed.connect(self._search); tb.addWidget(self.search_box)
+        self.search_box.setMaximumWidth(190)
+        self.search_box.textChanged.connect(self._on_search_text)        # live highlight
+        self.search_box.returnPressed.connect(lambda: self._search_goto(0))  # Enter -> first
+        tb.addWidget(self.search_box)
+        self.search_count = QLabel(""); tb.addWidget(self.search_count)
+        self.search_next = QToolButton(); self.search_next.setText("▶")
+        self.search_next.setToolTip("下一个匹配")
+        self.search_next.clicked.connect(lambda: self._search_goto(self._search_idx + 1))
+        tb.addWidget(self.search_next)
+        self._search_hits = []; self._search_idx = -1
         self._themes = themes.available_themes()
         self._refresh_recents_menu()
 
@@ -217,11 +229,30 @@ class MainWindow(QMainWindow):
         export_csv(rows, path)
         QMessageBox.information(self, "导出完成", f"已导出 {len(rows)} 个单词到\n{path}")
 
-    def _search(self):
-        q = self.search_box.text().strip()
-        if not q or not self.view._doc: return
-        hits = self.view._doc.search(q)
-        if hits: self.view.highlight(hits[0][0], [r for i, r in hits if i == hits[0][0]])
+    def _on_search_text(self, text):
+        """Live search: highlight every match as you type; empty -> clear."""
+        q = text.strip()
+        if not q or self.view._doc is None:
+            self._search_hits = []
+            self._search_idx = -1
+            self.view.clear_highlights()
+            self.search_count.setText("")
+            return
+        self._search_hits = self.view._doc.search(q)  # [(page, rect), ...]
+        self._search_idx = -1
+        self.view.set_highlights(self._search_hits)   # highlight all (current page shows)
+        self.search_count.setText(f"{len(self._search_hits)} 处" if self._search_hits else "无匹配")
+
+    def _search_goto(self, i):
+        """Jump to the i-th match (wraps around) and show its position counter."""
+        if not self._search_hits:
+            return
+        n = len(self._search_hits)
+        i %= n
+        self._search_idx = i
+        page, _rect = self._search_hits[i]
+        self.view.goto(page)
+        self.search_count.setText(f"{i + 1} / {n}")
 
     # --- Task 6.3: side-by-side page / whole-doc translation ---
     def _page_paragraphs(self, index):

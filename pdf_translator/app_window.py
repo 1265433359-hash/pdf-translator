@@ -74,6 +74,7 @@ class MainWindow(QMainWindow):
             side.addAction(a)
         spacer = QWidget(); spacer.setSizePolicy(QSizePolicy.Policy.Preferred,
                                                  QSizePolicy.Policy.Expanding)
+        spacer.setStyleSheet("background: transparent;")
         side.addWidget(spacer)
         side.addAction(self.settings_action)
 
@@ -114,6 +115,7 @@ class MainWindow(QMainWindow):
         self._annot_dirty = False
         spacer2 = QWidget(); spacer2.setSizePolicy(QSizePolicy.Policy.Expanding,
                                                    QSizePolicy.Policy.Preferred)
+        spacer2.setStyleSheet("background: transparent;")
         tb.addWidget(spacer2)
         self.search_box = QLineEdit(); self.search_box.setPlaceholderText("在文档中搜索…")
         self.search_box.setMaximumWidth(220)
